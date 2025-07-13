@@ -6,6 +6,7 @@ use crate::{env, json_types::Base64VecU8};
 
 /// Initialization state for non-existing contract
 #[near(inside_nearsdk, serializers=[borsh, json])]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateInit {
     /// Code to deploy
     pub code: ContractCode,
@@ -34,6 +35,7 @@ impl StateInit {
 /// Code to deploy for non-existing contract
 #[near(inside_nearsdk, serializers=[borsh, json])]
 #[serde(tag = "location", content = "data", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ContractCode {
     /// Actual WASM binary
     Inline(Vec<u8>),
@@ -45,6 +47,7 @@ pub enum ContractCode {
 
 /// Function call arguments for first initialization
 #[near(inside_nearsdk, serializers=[borsh, json])]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateInitFunctionCall {
     pub function_name: String,
     pub args: Base64VecU8,
@@ -52,6 +55,7 @@ pub struct StateInitFunctionCall {
 
 /// Arguments for [`.function_call_weight_state_init()`](crate::Promise::function_call_weight_state_init)
 #[near(inside_nearsdk, serializers=[borsh, json])]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateInitArgs {
     pub state_init: StateInit,
     pub amount: NearToken,

@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use near_sdk::{
     borsh, ext_contract, json_types::U128, near, AccountId, AccountIdRef, ContractCode, Gas,
-    NearToken, PromiseOrValue, StateInit, StateInitArgs, StateInitFunctionCall,
+    NearToken, PanicOnDefault, PromiseOrValue, StateInit, StateInitArgs, StateInitFunctionCall,
 };
 
 /// # Sharded Fungible Token wallet-contract
@@ -116,8 +116,10 @@ pub trait ShardedFungibleTokenWallet {
 )]
 #[cfg_attr(
     feature = "sharded_fungible_token_wallet_impl",
-    near(contract_state, serializers = [json]),
+    near(contract_state, serializers = [borsh, json]),
+    derive(PanicOnDefault),
 )]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShardedFungibleTokenWalletData {
     pub owner_id: AccountId,
     pub minter_id: AccountId,
@@ -164,6 +166,7 @@ impl ShardedFungibleTokenWalletData {
 
 /// Init args for `.init()`
 #[near(serializers = [borsh])]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitArgs<'a> {
     pub owner_id: Cow<'a, AccountIdRef>,
     pub minter_id: Cow<'a, AccountIdRef>,
@@ -171,6 +174,7 @@ pub struct InitArgs<'a> {
 
 /// Arguments for constructing `receiver_id::sft_on_transfer()` notification
 #[near(serializers = [borsh, json])]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransferNotificaton {
     /// Message be passed in `receiver_id::sft_on_transfer()`
     pub msg: String,

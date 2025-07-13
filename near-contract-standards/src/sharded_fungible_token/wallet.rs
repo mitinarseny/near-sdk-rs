@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 
 use near_sdk::{
-    ext_contract, json_types::U128, near, AccountId, AccountIdRef, Gas, NearToken, PromiseOrValue,
-    StateInitArgs,
+    borsh, ext_contract, json_types::U128, near, AccountId, AccountIdRef, ContractCode, Gas,
+    NearToken, PromiseOrValue, StateInit, StateInitArgs, StateInitFunctionCall,
 };
 
 /// # Sharded Fungible Token wallet-contract
@@ -123,6 +123,37 @@ impl ShardedFungibleTokenWalletData {
     pub const MIN_BALANCE: NearToken = NearToken::from_millinear(500);
     pub const SFT_RECEIVE_MIN_GAS: Gas = Gas::from_tgas(5);
     pub const SFT_RESOLVE_GAS: Gas = Gas::from_tgas(5);
+
+    /// Deteministically derive [`AccountId`] of a wallet-contract
+    /// with given `wallet_code` and `minter_id` for given `owner_id`
+    pub fn wallet_account_id(
+        wallet_code: ContractCode,
+        owner_id: &AccountIdRef,
+        minter_id: &AccountIdRef,
+    ) -> AccountId {
+        Self::state_init_for(wallet_code, owner_id, minter_id).derived_account_id()
+    }
+
+    /// Prepare `StateInit` for a wallet-contract with given `wallet_code` and
+    /// `minter_id` for given `owner_id`
+    pub fn state_init_for(
+        wallet_code: ContractCode,
+        owner_id: &AccountIdRef,
+        minter_id: &AccountIdRef,
+    ) -> StateInit {
+        StateInit {
+            code: wallet_code,
+            init_call: Some(StateInitFunctionCall {
+                function_name: "init".to_string(),
+                args: borsh::to_vec(&InitArgs {
+                    owner_id: Cow::Borrowed(owner_id),
+                    minter_id: Cow::Borrowed(minter_id),
+                })
+                .unwrap()
+                .into(),
+            }),
+        }
+    }
 }
 
 /// Init args for `.init()`

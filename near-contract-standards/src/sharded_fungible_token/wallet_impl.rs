@@ -1,8 +1,6 @@
-use std::borrow::Cow;
-
 use near_sdk::{
-    borsh, env, json_types::U128, near, require, serde_json, AccountId, AccountIdRef, NearToken,
-    PromiseOrValue, PromiseResult, StateInit, StateInitArgs, StateInitFunctionCall,
+    env, json_types::U128, near, require, serde_json, AccountId, NearToken, PromiseOrValue,
+    PromiseResult, StateInitArgs,
 };
 
 use crate::sharded_fungible_token::{
@@ -80,7 +78,8 @@ impl ShardedFungibleTokenWallet for ShardedFungibleTokenWalletData {
             .checked_sub(Self::MIN_BALANCE)
             .filter(|d| *d >= NearToken::from_yoctonear(1))
             .unwrap_or_else(|| env::panic_str("insufficient attached deposit"));
-        let receiver_wallet_init = self.state_init_for(&receiver_id);
+        let receiver_wallet_init =
+            Self::state_init_for(env::current_contract_code(), &receiver_id, &self.minter_id);
         let receiver_wallet_id = receiver_wallet_init.derived_account_id();
 
         // call receiver_wallet_id::sft_receive()
@@ -136,10 +135,15 @@ impl ShardedFungibleTokenWallet for ShardedFungibleTokenWalletData {
         assert_at_least_one_yocto_near();
         let sender_wallet_id = env::predecessor_account_id();
 
-        // verify sender is a valid wallet or self.minter_id
+        // verify sender is a valid wallet-contract or self.minter_id
         require!(
             sender_wallet_id == self.minter_id
-                || sender_wallet_id == self.wallet_account_id(&sender_id),
+                || sender_wallet_id
+                    == Self::wallet_account_id(
+                        env::current_contract_code(),
+                        &sender_id,
+                        &self.minter_id
+                    ),
             "invalid wallet",
         );
 
@@ -251,30 +255,6 @@ impl ShardedFungibleTokenWallet for ShardedFungibleTokenWalletData {
         };
 
         U128(used_amount)
-    }
-}
-
-impl ShardedFungibleTokenWalletData {
-    /// Deteministically derive account_id of wallet-contract
-    /// for given `owner_id`
-    fn wallet_account_id(&self, owner_id: &AccountIdRef) -> AccountId {
-        self.state_init_for(owner_id).derived_account_id()
-    }
-
-    /// Prepare `StateInit` for wallet-contract of `self.minter_id` for given `owner_id`
-    fn state_init_for(&self, owner_id: &AccountIdRef) -> StateInit {
-        StateInit {
-            code: env::current_contract_code(),
-            init_call: Some(StateInitFunctionCall {
-                function_name: "init".to_string(),
-                args: borsh::to_vec(&InitArgs {
-                    owner_id: Cow::Borrowed(owner_id),
-                    minter_id: Cow::Borrowed(&self.minter_id),
-                })
-                .unwrap()
-                .into(),
-            }),
-        }
     }
 }
 

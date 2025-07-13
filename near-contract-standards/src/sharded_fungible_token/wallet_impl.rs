@@ -62,7 +62,7 @@ impl ShardedFungibleTokenWallet for ShardedFungibleTokenWalletData {
         &mut self,
         receiver_id: AccountId,
         amount: U128,
-        memo: String,
+        memo: Option<String>,
         notify: Option<TransferNotificaton>,
         wallet_init_refund_to: Option<AccountId>,
     ) -> PromiseOrValue<U128> {
@@ -100,7 +100,9 @@ impl ShardedFungibleTokenWallet for ShardedFungibleTokenWalletData {
             .with_state_init(Some(StateInitArgs {
                 state_init: receiver_wallet_init,
                 amount: Self::MIN_BALANCE,
-                refund_to: wallet_init_refund_to.unwrap_or_else(env::predecessor_account_id),
+                refund_to: wallet_init_refund_to
+                    // refund to predecessor by default
+                    .unwrap_or_else(env::predecessor_account_id),
             }))
             .sft_receive(self.owner_id.clone(), amount, memo, notify)
             .then(
@@ -129,7 +131,7 @@ impl ShardedFungibleTokenWallet for ShardedFungibleTokenWalletData {
         sender_id: AccountId,
         amount: U128,
         // memo will be stored in receipt's FunctionCall args anyway
-        #[allow(unused_variables)] memo: String,
+        #[allow(unused_variables)] memo: Option<String>,
         notify: Option<TransferNotificaton>,
     ) -> PromiseOrValue<U128> {
         assert_at_least_one_yocto_near();
@@ -183,6 +185,11 @@ impl ShardedFungibleTokenWallet for ShardedFungibleTokenWalletData {
             .into()
     }
 
+    /// Burn given `amount` and notify [`minter_id::sft_on_burn()`](super::minter::SharedFungibleTokenBurner::sft_on_burn).
+    /// If `minter_id` doesn't support burning or returns partial
+    /// `used_amount`, then `amount - used_amount` will be minter back
+    /// on `sender_id`.
+    ///
     /// Code of this wallet-contract will be re-used across all applications
     /// that want to interact with sharded fungible tokens, so we need a
     /// uniform method to burn tokens to be supported by every wallet-contract.

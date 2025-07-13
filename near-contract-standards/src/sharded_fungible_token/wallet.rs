@@ -60,7 +60,7 @@ pub trait ShardedFungibleTokenWallet {
         &mut self,
         receiver_id: AccountId,
         amount: U128,
-        memo: String,
+        memo: Option<String>,
         notify: Option<TransferNotificaton>,
         wallet_init_refund_to: Option<AccountId>,
     ) -> PromiseOrValue<U128>;
@@ -81,23 +81,29 @@ pub trait ShardedFungibleTokenWallet {
         &mut self,
         sender_id: AccountId,
         amount: U128,
-        #[allow(unused_variables)] memo: String,
+        memo: Option<String>,
         notify: Option<TransferNotificaton>,
     ) -> PromiseOrValue<U128>;
 
+    /// Burn given `amount` and notify [`minter_id::sft_on_burn()`](super::minter::SharedFungibleTokenBurner::sft_on_burn).
+    /// If `minter_id` doesn't support burning or returns partial
+    /// `used_amount`, then `amount - used_amount` will be minter back
+    /// on `sender_id`.
+    ///
     /// Code of this wallet-contract will be re-used across all applications
     /// that want to interact with sharded fungible tokens, so we need a
     /// uniform method to burn tokens to be supported by every wallet-contract.
     /// If the minter-contract doesn't support burning, these tokens
     /// will be minted back on burner wallet-contract.
     ///
-    /// Returns `burned_amount`
+    /// Returns `burned_amount`.
     ///
     /// Note: must be #[payable] and require at least 1yN attached
     fn sft_burn(&mut self, amount: U128, msg: String) -> PromiseOrValue<U128>;
 
     /// Gets result from `sft_receive()`, `sft_on_transfer()`
-    /// or `sft_on_burn()` and returns `used_amount`.
+    /// or `sft_on_burn()`, adjusts the balance accordingly
+    /// and returns `used_amount`.
     ///
     /// Note: must be #[private]
     fn sft_resolve(&mut self, amount: U128, sender: bool) -> U128;

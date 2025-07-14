@@ -8,9 +8,7 @@ use std::num::NonZeroU128;
 use std::rc::Rc;
 
 use crate::env::migrate_to_allowance;
-use crate::{
-    AccountId, Gas, GasWeight, NearToken, PromiseIndex, PublicKey, StateInit, StateInitArgs,
-};
+use crate::{AccountId, Gas, GasWeight, NearToken, PromiseIndex, PublicKey, StateInit};
 
 /// Allow an access key to spend either an unlimited or limited amount of gas
 // This wrapper prevents incorrect construction
@@ -36,6 +34,13 @@ enum PromiseAction {
     DeployContract {
         code: Vec<u8>,
     },
+    StateInit {
+        state_init: StateInit,
+        amount: NearToken,
+        gas: Gas,
+        weight: GasWeight,
+        refund_to: AccountId,
+    },
     FunctionCall {
         function_name: String,
         arguments: Vec<u8>,
@@ -48,16 +53,6 @@ enum PromiseAction {
         amount: NearToken,
         gas: Gas,
         weight: GasWeight,
-    },
-    FunctionCallWeightStateInit {
-        function_name: String,
-        arguments: Vec<u8>,
-        amount: NearToken,
-        gas: Gas,
-        weight: GasWeight,
-        state_init: StateInit,
-        state_init_amount: NearToken,
-        state_init_refund_to: AccountId,
     },
     Transfer {
         amount: NearToken,
@@ -93,6 +88,16 @@ impl PromiseAction {
             DeployContract { code } => {
                 crate::env::promise_batch_action_deploy_contract(promise_index, code)
             }
+            StateInit { state_init, amount, gas, weight, refund_to } => {
+                crate::env::promise_batch_action_state_init(
+                    promise_index,
+                    state_init,
+                    *amount,
+                    *gas,
+                    GasWeight(weight.0),
+                    refund_to,
+                )
+            }
             FunctionCall { function_name, arguments, amount, gas } => {
                 crate::env::promise_batch_action_function_call(
                     promise_index,
@@ -112,26 +117,6 @@ impl PromiseAction {
                     GasWeight(weight.0),
                 )
             }
-            FunctionCallWeightStateInit {
-                function_name,
-                arguments,
-                amount,
-                gas,
-                weight,
-                state_init,
-                state_init_amount,
-                state_init_refund_to,
-            } => crate::env::promise_batch_action_function_call_weight_state_init(
-                promise_index,
-                function_name,
-                arguments,
-                *amount,
-                *gas,
-                GasWeight(weight.0),
-                state_init,
-                *state_init_amount,
-                state_init_refund_to,
-            ),
             Transfer { amount } => {
                 crate::env::promise_batch_action_transfer(promise_index, *amount)
             }
@@ -364,29 +349,15 @@ impl Promise {
     /// refund `state_init.amount` to `state_init.refund_to`.
     ///
     /// See [`crate::env::promise_batch_action_function_call_weight_state_init`]
-    pub fn function_call_weight_state_init(
+    pub fn state_init(
         self,
-        function_name: String,
-        arguments: Vec<u8>,
+        state_init: StateInit,
         amount: NearToken,
         gas: Gas,
         weight: GasWeight,
-        state_init: Option<StateInitArgs>,
+        refund_to: AccountId,
     ) -> Self {
-        let Some(state_init) = state_init else {
-            return self.function_call_weight(function_name, arguments, amount, gas, weight);
-        };
-
-        self.add_action(PromiseAction::FunctionCallWeightStateInit {
-            function_name,
-            arguments,
-            amount,
-            gas,
-            weight,
-            state_init: state_init.state_init,
-            state_init_amount: state_init.amount,
-            state_init_refund_to: state_init.refund_to,
-        })
+        self.add_action(PromiseAction::StateInit { state_init, amount, gas, weight, refund_to })
     }
 
     /// Transfer tokens to the account that this promise acts on.

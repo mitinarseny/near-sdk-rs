@@ -84,6 +84,15 @@ impl ShardedFungibleTokenWallet for ShardedFungibleTokenWalletData {
 
         // call receiver_wallet_id::sft_receive()
         Self::ext(receiver_wallet_id)
+            // deploy if not exist
+            .with_state_init(Some(StateInitArgs {
+                state_init: receiver_wallet_init,
+                amount: Self::MIN_BALANCE,
+                gas: Self::INIT_GAS,
+                refund_to: wallet_init_refund_to
+                    // refund to predecessor by default
+                    .unwrap_or_else(env::predecessor_account_id),
+            }))
             // forward all attached deposit
             .with_attached_deposit(forward_deposit)
             // require minimum gas
@@ -96,14 +105,6 @@ impl ShardedFungibleTokenWallet for ShardedFungibleTokenWalletData {
             })
             // forward all remaining gas here
             .with_unused_gas_weight(1)
-            // deploy if not exist
-            .with_state_init(Some(StateInitArgs {
-                state_init: receiver_wallet_init,
-                amount: Self::MIN_BALANCE,
-                refund_to: wallet_init_refund_to
-                    // refund to predecessor by default
-                    .unwrap_or_else(env::predecessor_account_id),
-            }))
             .sft_receive(self.owner_id.clone(), amount, memo, notify)
             .then(
                 Self::ext(env::current_account_id())
@@ -170,11 +171,11 @@ impl ShardedFungibleTokenWallet for ShardedFungibleTokenWalletData {
         };
 
         sft_receiver::ext(self.owner_id.clone())
+            .with_state_init(notify.state_init)
             // forward all attached deposit
             .with_attached_deposit(forward_deposit)
             // forward all remaining gas here
             .with_unused_gas_weight(1)
-            .with_state_init(notify.state_init)
             .sft_on_transfer(sender_id, amount, notify.msg)
             .then(
                 Self::ext(env::current_account_id())

@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use near_sdk::{
     borsh, ext_contract, json_types::U128, near, AccountId, AccountIdRef, ContractCode, Gas,
-    NearToken, PanicOnDefault, PromiseOrValue, StateInit, StateInitArgs, StateInitFunctionCall,
+    NearToken, PromiseOrValue, StateInit, StateInitArgs, StateInitFunctionCall,
 };
 
 /// # Sharded Fungible Token wallet-contract
@@ -117,7 +117,7 @@ pub trait ShardedFungibleTokenWallet {
 #[cfg_attr(
     feature = "sharded_fungible_token_wallet_impl",
     near(contract_state, serializers = [borsh, json]),
-    derive(PanicOnDefault),
+    derive(::near_sdk::PanicOnDefault),
 )]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShardedFungibleTokenWalletData {
@@ -129,6 +129,7 @@ pub struct ShardedFungibleTokenWalletData {
 impl ShardedFungibleTokenWalletData {
     // TODO: calculate exact values
     pub const MIN_BALANCE: NearToken = NearToken::from_millinear(500);
+    pub const INIT_GAS: Gas = Gas::from_tgas(5);
     pub const SFT_RECEIVE_MIN_GAS: Gas = Gas::from_tgas(5);
     pub const SFT_RESOLVE_GAS: Gas = Gas::from_tgas(5);
 

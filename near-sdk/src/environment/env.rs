@@ -1122,6 +1122,34 @@ pub fn promise_batch_action_deploy_contract(promise_index: PromiseIndex, code: &
     }
 }
 
+/// If the contract doesn't exist, it will be deployed & initialized
+/// with `state_init`. Note that the `receiver_id` of the `Promise`
+/// must be equal to `state_init`[`.derived_account_id()`](StateInit::derived_account_id).
+///
+/// To pay for storage in case of deployment, `amount` will be
+/// immediately subtracted from current account's balance as a
+/// "reserve" for storage costs. If the receiver contract turns out
+/// to be initialized when this receipt gets executed, then a new
+/// receipt is created to refund `amount` to `refund_to`.
+///
+/// # Panics
+/// This function panics if at least one of following conditions were not met:
+/// * `receiver_id` of the `Promise` must be equal to `state_init.derived_account_id()`
+/// * `amount` is sufficient to cover storage costs
+///   at least to store the code of the contract
+/// * current account has enough balance to pay for `amount`
+#[allow(unused_variables)] // TODO: remove
+pub fn promise_batch_action_state_init(
+    promise_index: PromiseIndex,
+    state_init: &StateInit, // TODO: StateInitRef<'a> to avoid cloning
+    amount: NearToken,
+    gas: Gas,
+    weight: GasWeight,
+    refund_to: &AccountIdRef,
+) {
+    unimplemented!("TBD")
+}
+
 /// Attach a function call promise action to the NEAR promise index with the provided promise index.
 ///
 /// More info about batching [here](crate::env::promise_batch_create)
@@ -1209,43 +1237,6 @@ pub fn promise_batch_action_function_call_weight(
             weight.0,
         )
     }
-}
-
-/// Same as [`promise_batch_action_function_call_weight`], except that if
-/// the contract doesn't exist, it will be deployed & initialized with
-/// `state_init`. Note that the `receiver_id` of the `Promise` must be
-/// equal to `state_init`[`.derived_account_id()`](StateInit::derived_account_id).
-///
-/// To pay for storage in case of deployment, `state_init_amount` will be
-/// immediately subtracted from current account's balance as a "reserve"
-/// for storage costs. If the receiver contract turns out to be initialized
-/// when this receipt gets executed, then a new receipt is created to refund
-/// `state_init_amount` to `state_init_refund_to`.
-///
-/// # Panics
-/// This function panics if at least one of following conditions were not met:
-/// * `receiver_id` of the `Promise` must be equal to `state_init.derived_account_id()`
-/// * `state_init_amount` is sufficient to cover storage costs
-///   at least to store the code of the contract
-/// * current account has enough balance to pay for `state_init_amount`
-/// * other conditions from [`promise_batch_action_function_call_weight()`]
-#[allow(
-    clippy::too_many_arguments,
-    unused_variables, // TODO: remove
-)]
-pub fn promise_batch_action_function_call_weight_state_init(
-    promise_index: PromiseIndex,
-    function_name: &str,
-    arguments: &[u8],
-    amount: NearToken,
-    gas: Gas,
-    weight: GasWeight,
-    // new params:
-    state_init: &StateInit, // TODO: StateInitRef<'a> to avoid cloning
-    state_init_amount: NearToken,
-    state_init_refund_to: &AccountIdRef,
-) {
-    unimplemented!("TBD")
 }
 
 /// Attach a transfer promise action to the NEAR promise index with the provided promise index.

@@ -138,8 +138,17 @@ fn generate_ext_function(attr_signature_info: &AttrSigInfo) -> TokenStream2 {
         #new_non_bindgen_attrs
         pub fn #ident #generics(self, #pat_type_list) -> ::near_sdk::Promise {
             let __args = #serialize;
-            ::near_sdk::Promise::new(self.account_id)
-            .function_call_weight(
+            let mut __promise = ::near_sdk::Promise::new(self.account_id);
+            if let Some(state_init) = self.state_init {
+                __promise = __promise.state_init(
+                    state_init.state_init,
+                    state_init.amount,
+                    state_init.gas,
+                    ::near_sdk::GasWeight(0),
+                    state_init.refund_to,
+                );
+            }
+            __promise.function_call_weight(
                 ::std::string::String::from(#ident_str),
                 __args,
                 self.deposit,

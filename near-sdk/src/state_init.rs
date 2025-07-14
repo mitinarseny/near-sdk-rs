@@ -1,4 +1,5 @@
 use near_account_id::AccountId;
+use near_gas::NearGas;
 use near_sdk_macros::near;
 use near_token::NearToken;
 
@@ -53,11 +54,11 @@ pub struct StateInitFunctionCall {
     pub args: Base64VecU8,
 }
 
-/// Arguments for [`.function_call_weight_state_init()`](crate::Promise::function_call_weight_state_init)
 #[near(inside_nearsdk, serializers=[borsh, json])]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateInitArgs {
     pub state_init: StateInit,
     pub amount: NearToken,
+    pub gas: NearGas,
     pub refund_to: AccountId,
 }

@@ -64,8 +64,9 @@ impl ShardedFungibleTokenWallet for ShardedFungibleTokenWalletData {
         amount: U128,
         memo: Option<String>,
         notify: Option<TransferNotificaton>,
-        wallet_init_refund_to: Option<AccountId>,
+        init_receiver_wallet_or_refund_to: Option<AccountId>,
     ) -> PromiseOrValue<U128> {
+        assert_at_least_one_yocto_near();
         require!(env::predecessor_account_id() == self.owner_id, "not owner");
 
         self.balance.0 = self
@@ -74,24 +75,25 @@ impl ShardedFungibleTokenWallet for ShardedFungibleTokenWalletData {
             .checked_sub(amount.0)
             .unwrap_or_else(|| env::panic_str("insufficient balance"));
 
-        let forward_deposit = env::attached_deposit()
-            .checked_sub(Self::MIN_BALANCE)
-            .filter(|d| *d >= NearToken::from_yoctonear(1))
-            .unwrap_or_else(|| env::panic_str("insufficient attached deposit"));
         let receiver_wallet_init =
             Self::state_init_for(env::current_contract_code(), &receiver_id, &self.minter_id);
         let receiver_wallet_id = receiver_wallet_init.derived_account_id();
 
+        let mut forward_deposit = env::attached_deposit();
+
         // call receiver_wallet_id::sft_receive()
         Self::ext(receiver_wallet_id)
             // deploy if not exist
-            .with_state_init(Some(StateInitArgs {
-                state_init: receiver_wallet_init,
-                amount: Self::MIN_BALANCE,
-                gas: Self::INIT_GAS,
-                refund_to: wallet_init_refund_to
-                    // refund to predecessor by default
-                    .unwrap_or_else(env::predecessor_account_id),
+            .with_state_init(init_receiver_wallet_or_refund_to.map(|refund_to| {
+                forward_deposit = forward_deposit
+                    .checked_sub(Self::MIN_BALANCE)
+                    .unwrap_or_else(|| env::panic_str("insufficient attached deposit"));
+                StateInitArgs {
+                    state_init: receiver_wallet_init,
+                    amount: Self::MIN_BALANCE,
+                    gas: Self::INIT_GAS,
+                    refund_to,
+                }
             }))
             // forward all attached deposit
             .with_attached_deposit(forward_deposit)
@@ -239,7 +241,7 @@ impl ShardedFungibleTokenWallet for ShardedFungibleTokenWalletData {
             PromiseResult::Successful(value) => {
                 serde_json::from_slice::<U128>(&value).unwrap_or_default().0.min(amount.0)
             }
-            PromiseResult::Failed => amount.0,
+            PromiseResult::Failed => 0,
         };
 
         let mut refund_amount = amount.0.saturating_sub(used_amount);

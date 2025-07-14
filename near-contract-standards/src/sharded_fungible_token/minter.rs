@@ -18,12 +18,17 @@ pub trait ShardedFungibleTokenMinter {
 
 /// Optional "burner" trait for [minter-contract](ShardedFungibleTokenMinter).
 #[ext_contract(sft_burner)]
-pub trait SharedFungibleTokenBurner: ShardedFungibleTokenMinter {
+pub trait ShardedFungibleTokenBurner: ShardedFungibleTokenMinter {
     /// Performs custom logic for burning tokens.
     /// Returns used amount of tokens successfully burnt, while
     /// `amount - used_amount` (or `amount` if not implemented or panics)
     /// will be minted back on `sender_id`.
     ///
     /// Note: must be `#[payable]` and require at least 1yN attached
-    fn sft_on_burn(sender_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128>;
+    fn sft_on_burn(
+        &mut self,
+        sender_id: AccountId,
+        amount: U128,
+        msg: String,
+    ) -> PromiseOrValue<U128>;
 }

@@ -45,14 +45,18 @@ impl ShardedFungibleTokenWallet for ShardedFungibleTokenWalletData {
 
     /// Transfer given `amount` of tokens to `receiver_id`.
     ///
-    /// Requires at least [`ShardedFungibleTokenWalletData::MIN_BALANCE`]
-    /// attached deposit to reserve for deploying receiver's wallet-contract
-    /// if it doesn't exist. If it turned out to be already deployed, then
-    /// reserved NEAR tokens are sent to `wallet_init_refund_to`.
+    /// Requires at least 1 yoctoNear attached deposit.
     ///
-    /// If `notify` is set, then `receiver_id::sft_on_transfer()` will be
-    /// called. If `notify.state_init` is set, then `receiver_id` will be
-    /// initialized if doesn't exist.
+    /// If `init_receiver_wallet_or_refund_to` is set, then requires
+    /// at least [`ShardedFungibleTokenWalletData::MIN_BALANCE`]
+    /// attached deposit to reserve for deploying receiver's
+    /// wallet-contract if it doesn't exist. If it turned out to be
+    /// already deployed, then reserved NEAR tokens are sent to
+    /// `init_receiver_wallet_or_refund_to`.
+    ///
+    /// If `notify` is set, then `receiver_id::sft_on_transfer()`
+    /// will be called. If `notify.state_init` is set, then
+    /// `receiver_id` will be initialized if doesn't exist.
     ///
     /// Remaining attached deposit is forwarded to `receiver_id::sft_on_transfer()`.
     ///

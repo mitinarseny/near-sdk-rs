@@ -35,7 +35,7 @@ struct SFTWalletContract(SFTWalletData<'static>);
 impl ShardedFungibleTokenWallet for SFTWalletContract {
     /// View method to get all data at once
     fn sft_wallet_data(self) -> ContractState<SFTWalletData<'static>> {
-        ContractState { code: env::current_contract_code(), state: self.0 }
+        ContractState { code: env::current_contract_code(), state: self.0.into() }
     }
 
     /// Transfer given `amount` of tokens to `receiver_id`.

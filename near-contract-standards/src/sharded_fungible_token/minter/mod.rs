@@ -1,6 +1,11 @@
 pub mod ft2sft;
 
-use near_sdk::{ext_contract, json_types::U128, AccountId, ContractCode, PromiseOrValue};
+use near_sdk::{
+    ext_contract, json_types::U128, near, serde_with::DisplayFromStr, AccountId, ContractCode,
+    PromiseOrValue,
+};
+
+use crate::contract_state::ContractState;
 
 /// # Sharded Fungible Token Minter
 ///
@@ -10,15 +15,30 @@ use near_sdk::{ext_contract, json_types::U128, AccountId, ContractCode, PromiseO
 /// See [Jetton minter](https://docs.ton.org/v3/guidelines/dapps/asset-processing/jettons#jetton-minter).
 #[ext_contract(ext_sft_minter)]
 pub trait ShardedFungibleTokenMinter {
-    /// Returns total supply of the token
-    fn sft_total_supply(&self) -> U128;
-
-    /// Returns contract code used for wallet-contracts (likely to be reference to global)
-    fn sft_wallet_code(self) -> ContractCode;
+    /// View method to get all data at once
+    fn sft_minter_data(self) -> ContractState<SftMinterData>;
 
     /// View-method to calculate [`AccountId`] of wallet-contract for given
     /// `owner_id`, primarily to be used off-chain.
     fn sft_wallet_account_id(&self, owner_id: AccountId) -> AccountId;
+}
+
+#[near(serializers = [borsh, json])]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SftMinterData {
+    /// Total amount of fungible tokens minted
+    #[serde_as(as = "DisplayFromStr")]
+    pub total_supply: u128,
+
+    /// Code for deploying child wallet-contracts
+    pub sft_wallet_code: ContractCode,
+}
+
+impl SftMinterData {
+    #[inline]
+    pub fn init(sft_wallet_code: impl Into<ContractCode>) -> Self {
+        Self { total_supply: 0, sft_wallet_code: sft_wallet_code.into() }
+    }
 }
 
 /// Optional "burner" trait for [minter-contract](ShardedFungibleTokenMinter).

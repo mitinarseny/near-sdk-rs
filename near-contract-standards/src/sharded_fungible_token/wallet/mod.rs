@@ -3,7 +3,7 @@
 #[cfg(feature = "sft-wallet-impl")]
 mod impl_;
 
-use std::{borrow::Cow, collections::BTreeMap};
+use std::borrow::Cow;
 
 use near_sdk::{
     ext_contract,
@@ -122,11 +122,6 @@ pub struct SFTWalletData<'a> {
 
     /// [Minter](super::minter::ShardedFungibleTokenMinter)'s [`AccountId`]
     pub minter_id: Cow<'a, AccountIdRef>,
-
-    /// Extra information that can be used by extended implementations such as
-    /// [mintless tokens](https://github.com/ton-blockchain/mintless-jetton-contract).
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub extra: BTreeMap<String, String>,
 }
 
 impl<'a> SFTWalletData<'a> {
@@ -140,13 +135,7 @@ impl<'a> SFTWalletData<'a> {
         owner_id: impl Into<Cow<'a, AccountIdRef>>,
         minter_id: impl Into<Cow<'a, AccountIdRef>>,
     ) -> Self {
-        Self {
-            status: 0,
-            balance: 0,
-            owner_id: owner_id.into(),
-            minter_id: minter_id.into(),
-            extra: BTreeMap::new(),
-        }
+        Self { status: 0, balance: 0, owner_id: owner_id.into(), minter_id: minter_id.into() }
     }
 
     #[inline]

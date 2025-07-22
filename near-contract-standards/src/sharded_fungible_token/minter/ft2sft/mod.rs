@@ -3,16 +3,15 @@ mod impl_;
 
 use std::borrow::Cow;
 
+use impl_tools::autoimpl;
 use near_sdk::{
-    ext_contract, near, serde_with::DisplayFromStr, AccountId, AccountIdRef, ContractCode,
-    ContractStorage, NearToken,
+    ext_contract, near, AccountId, AccountIdRef, ContractCode, ContractStorage, NearToken,
 };
 
 use crate::{
-    contract_state::ContractState,
     fungible_token::receiver::FungibleTokenReceiver,
     sharded_fungible_token::{
-        minter::{ShardedFungibleTokenBurner, ShardedFungibleTokenMinter},
+        minter::{SftMinterData, ShardedFungibleTokenBurner, ShardedFungibleTokenMinter},
         wallet::TransferNotification,
     },
 };
@@ -25,22 +24,18 @@ use crate::{
 pub trait Ft2Sft:
     ShardedFungibleTokenMinter + ShardedFungibleTokenBurner + FungibleTokenReceiver
 {
-    /// View method to get all data at once
-    fn ft2sft_minter_data(self) -> ContractState<Ft2SftData<'static>>;
 }
 
 #[near(serializers = [borsh, json])]
+#[autoimpl(Deref using self.data)]
+#[autoimpl(DerefMut using self.data)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ft2SftData<'a> {
-    /// Total amount of fungible tokens minted
-    #[serde_as(as = "DisplayFromStr")]
-    pub total_supply: u128,
+    #[serde(flatten)]
+    pub data: SftMinterData,
 
     /// Contract implementing NEP-141 fungible token standard
     pub ft_contract_id: Cow<'a, AccountIdRef>,
-
-    /// Code for deploying child wallet-contracts
-    pub sft_wallet_code: ContractCode,
 }
 
 /// Message for [`.ft_on_transfer()`](crate::fungible_token::receiver::FungibleTokenReceiver::ft_on_transfer)
@@ -99,11 +94,7 @@ impl<'a> Ft2SftData<'a> {
         ft_contract_id: impl Into<Cow<'a, AccountIdRef>>,
         sft_wallet_code: impl Into<ContractCode>,
     ) -> Self {
-        Self {
-            total_supply: 0,
-            ft_contract_id: ft_contract_id.into(),
-            sft_wallet_code: sft_wallet_code.into(),
-        }
+        Self { data: SftMinterData::init(sft_wallet_code), ft_contract_id: ft_contract_id.into() }
     }
 
     #[inline]

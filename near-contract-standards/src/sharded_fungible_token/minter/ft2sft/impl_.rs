@@ -2,15 +2,15 @@ use impl_tools::autoimpl;
 use near_sdk::{
     env::{self, TooLongError},
     json_types::U128,
-    near, require, serde_json, AccountId, AccountIdRef, ContractCode, Gas, NearToken,
-    PanicOnDefault, Promise, PromiseError, PromiseOrValue, StateInit,
+    near, require, serde_json, AccountId, AccountIdRef, Gas, NearToken, PanicOnDefault, Promise,
+    PromiseError, PromiseOrValue, StateInit,
 };
 
 use crate::{
-    contract_state::ContractState,
+    contract_state::{ContractState, ExtraState},
     fungible_token::{core::ext_ft_core, receiver::FungibleTokenReceiver},
     sharded_fungible_token::{
-        minter::{ShardedFungibleTokenBurner, ShardedFungibleTokenMinter},
+        minter::{SftMinterData, ShardedFungibleTokenBurner, ShardedFungibleTokenMinter},
         wallet::{ext_sft_wallet, SFTWalletData},
     },
     storage_management::ext_storage_management,
@@ -28,20 +28,16 @@ use super::{BurnMessage, Ft2Sft, Ft2SftData, MintMessage};
 struct Ft2SftContract(Ft2SftData<'static>);
 
 #[near]
-impl Ft2Sft for Ft2SftContract {
-    fn ft2sft_minter_data(self) -> ContractState<Ft2SftData<'static>> {
-        ContractState { code: env::current_contract_code(), state: self.0 }
-    }
-}
+impl Ft2Sft for Ft2SftContract {}
 
 #[near]
 impl ShardedFungibleTokenMinter for Ft2SftContract {
-    fn sft_total_supply(&self) -> U128 {
-        U128(self.total_supply)
-    }
-
-    fn sft_wallet_code(self) -> ContractCode {
-        self.0.sft_wallet_code
+    fn sft_minter_data(self) -> ContractState<SftMinterData> {
+        ContractState {
+            code: env::current_contract_code(),
+            state: ExtraState::new(self.0.data)
+                .with("ft_contract_id", self.0.ft_contract_id.as_ref()),
+        }
     }
 
     fn sft_wallet_account_id(&self, owner_id: AccountId) -> AccountId {

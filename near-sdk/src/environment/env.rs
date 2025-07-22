@@ -183,11 +183,11 @@ pub fn current_contract_code() -> ContractCode {
             unsafe {
                 sys::read_register(ATOMIC_OP_REGISTER, code_hash.as_ptr() as _);
             }
-            ContractCode::CodeHash(code_hash)
+            ContractCode::GlobalCodeHash(code_hash)
         }
-        1 => ContractCode::AccountId(assert_valid_account_id(expect_register(read_register(
-            ATOMIC_OP_REGISTER,
-        )))),
+        1 => ContractCode::GlobalAccountId(assert_valid_account_id(expect_register(
+            read_register(ATOMIC_OP_REGISTER),
+        ))),
         _ => abort(),
     }
 }

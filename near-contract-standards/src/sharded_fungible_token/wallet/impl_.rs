@@ -13,17 +13,17 @@ use crate::{
     },
 };
 
-/// Reference implementation of Sharded Fungible Foken wallet-contract.
+/// # Reference implementation of Sharded Fungible Foken
+/// [wallet-contract](ShardedFungibleTokenWallet).
 ///
 /// This implementation should be globally deployed only once and can
 /// then be reused for different minter-contracts. Owners might reference
 /// its globally deployed code to calculate [`StateInit`] and verify
 /// authenticity of [`env::predecessor_account_id()`] via
-/// [`.derived_account_id()`](StateInit::derived_account_id).
+/// [`.derive_account_id()`](StateInit::derive_account_id).
 ///
 /// The implementation is highly inspired by [Jetton wallet](https://github.com/ton-blockchain/jetton-contract/blob/3d24b419f2ce49c09abf6b8703998187fe358ec9/contracts/jetton-wallet.fc)
-/// contract reference implementation.  
-/// See [wallet-contract documentation](ShardedFungibleTokenWallet).
+/// contract reference implementation.
 #[near(contract_state(key = SFTWalletData::STATE_KEY))]
 #[autoimpl(Deref using self.0)]
 #[autoimpl(DerefMut using self.0)]
@@ -38,41 +38,43 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
         ContractState { code: env::current_contract_code(), state: self.0 }
     }
 
-    /// Transfer given `amount` of fungible tokens to `receiver_id`.
+    /// Transfer given `amount` of tokens to `receiver_id`.
     ///
-    /// Requires at least 1 yoctoNear attached deposit.
+    /// Unless `no_init` is set, requires additional attached deposit to pay for
+    /// automatic deployment and initialization of receiver's wallet-contract.
+    /// If by the time the created receipt gets executed it turns out to be
+    /// already deployed, then reserved NEAR tokens refunded to `refund_to` or
+    /// predecessor, if not set. See [`near_sdk::StateInit`] and
+    /// [`near_sdk::env::promise_set_refund_to()`].
     ///
-    /// If `init_receiver_wallet_or_refund_to` is set, then requires
-    /// at least [`ShardedFungibleTokenWalletData::MIN_BALANCE`]
-    /// attached deposit to reserve for deploying receiver's
-    /// wallet-contract if it doesn't exist. If it turned out to be
-    /// already deployed, then reserved NEAR tokens are sent to
-    /// `init_receiver_wallet_or_refund_to`.
-    ///
-    /// If `notify` is set, then `receiver_id::sft_on_transfer()`
-    /// will be called. If `notify.state_init` is set, then
-    /// `receiver_id` will be initialized if doesn't exist.
-    ///
-    /// Remaining attached deposit is forwarded to `receiver_id::sft_on_transfer()`.
+    /// If `notify` is set, then [`receiver_id::sft_on_transfer()`](super::receiver::ShardedFungibleTokenReceiver)
+    /// will be called. If `notify.state_init` is set, then `receiver_id` will
+    /// be initialized if doesn't exist. See [`TransferNotification`].
     ///
     /// Returns `used_amount`.
     #[payable]
-    fn sft_transfer<'nearinput>(
+    fn sft_transfer(
         &mut self,
         receiver_id: AccountId,
         amount: U128,
+        #[allow(unused_variables)] custom_payload: Option<String>, // not used
         memo: Option<String>,
         notify: Option<TransferNotification>,
         refund_to: Option<AccountId>,
         no_init: Option<bool>,
     ) -> PromiseOrValue<U128> {
         let caller = env::predecessor_account_id();
-        require!(
-            // TODO: governance: status?
-            caller == *self.owner_id,
-            ERR_NOT_OWNER,
-        );
-        require!(receiver_id != *self.owner_id, ERR_SELF_TRANSFER);
+
+        #[cfg(not(feature = "sft-wallet-governed-impl"))]
+        require!(caller == *self.owner_id, Self::ERR_NOT_OWNER);
+        #[cfg(feature = "sft-wallet-governed-impl")]
+        {
+            let is_from_minter = caller == *self.minter_id;
+            require!(is_from_minter || caller == *self.owner_id, Self::ERR_NOT_OWNER);
+            require!(is_from_minter || !self.is_outgoing_transfers_locked(), Self::ERR_LOCKED);
+        }
+
+        require!(receiver_id != *self.owner_id, Self::ERR_SELF_TRANSFER);
 
         // We do not require `amount > 0`, since it can be used to just pay for
         // receiver's wallet-contract creation. Optionally, the receiver
@@ -81,7 +83,7 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
         self.balance = self
             .balance
             .checked_sub(amount.0)
-            .unwrap_or_else(|| env::panic_str(ERR_INSUFFICIENT_BALANCE));
+            .unwrap_or_else(|| env::panic_str(Self::ERR_INSUFFICIENT_BALANCE));
 
         let (state_init_amount, state_init) = {
             let state_init = self.sft_wallet_init_for(&receiver_id);
@@ -104,15 +106,16 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
 
         if let Some(amount) = state_init_amount {
             // subtract the required amount for state_init from attached deposit
-            deposit_left =
-                deposit_left.checked_sub(amount).unwrap_or_else(|| env::panic_str(ERR_DEPOSIT));
+            deposit_left = deposit_left
+                .checked_sub(amount)
+                .unwrap_or_else(|| env::panic_str(Self::ERR_INSUFFICIENT_DEPOSIT));
 
             // deploy & init receiver's wallet-contract
             p = p.state_init(state_init, amount);
         }
 
         // we still need at least 1yN to attach to `.sft_receive()`
-        require!(deposit_left >= NearToken::from_yoctonear(1), ERR_DEPOSIT);
+        require!(deposit_left >= NearToken::from_yoctonear(1), Self::ERR_INSUFFICIENT_DEPOSIT);
 
         Self::ext_on(p)
             // forward remaining attached deposit
@@ -121,13 +124,7 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
             .with_static_gas(SFTWalletData::SFT_RECEIVE_MIN_GAS)
             // forward all remaining gas here
             .with_unused_gas_weight(1)
-            .sft_receive(
-                self.owner_id.clone().into_owned(),
-                amount,
-                memo,
-                notify,
-                Some(refund_to.into()),
-            )
+            .sft_receive(self.owner_id.clone().into_owned(), amount, memo, notify, Some(refund_to))
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(SFTWalletData::SFT_RESOLVE_GAS)
@@ -138,22 +135,19 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
             .into()
     }
 
-    /// Receives tokens from minter-contract or wallet-contracts initialized
-    /// for the same minter-contract.
+    /// Receives tokens from [minter-contract](super::minter::ShardedFungibleTokenMinter)
+    /// or wallet-contracts initialized for the same minter-contract.
     ///
     /// If `notify` is set, then `receiver_id::sft_on_transfer()` will be
     /// called. If `notify.state_init` is set, then `receiver_id` will be
     /// initialized if doesn't exist.
     ///
-    /// Remaining attached deposit is forwarded to `receiver_id::sft_on_transfer()`.
+    /// Remaining attached deposit is refunded to `refund_to` or `sender_id`
+    /// if not set.
     ///
     /// Returns `used_amount`.
-    /// TODO: maybe return unused_amount from everywhere, so it's:
-    /// 1. cheaper on full transfers
-    /// 2. easier for other contracts to keep track of refunds by trusting
-    ///   sFT wallet contracts
     #[payable]
-    fn sft_receive<'nearinput>(
+    fn sft_receive(
         &mut self,
         sender_id: AccountId,
         amount: U128,
@@ -163,19 +157,22 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
         refund_to: Option<AccountId>,
     ) -> PromiseOrValue<U128> {
         let mut deposit_left = env::attached_deposit();
-        require!(deposit_left >= NearToken::from_yoctonear(1), ERR_DEPOSIT);
+        require!(deposit_left >= NearToken::from_yoctonear(1), Self::ERR_INSUFFICIENT_DEPOSIT);
 
         let caller = env::predecessor_account_id();
         // verify that the caller is a valid wallet-contract or the minter
         require!(
             caller == *self.minter_id || caller == self.sft_wallet_account_id_for(&caller),
-            ERR_WRONG_WALLET,
+            Self::ERR_WRONG_WALLET,
         );
+
+        #[cfg(feature = "sft-wallet-governed-impl")]
+        require!(!self.is_incoming_transfers_locked(), Self::ERR_LOCKED);
 
         self.balance = self
             .balance
             .checked_add(amount.0)
-            .unwrap_or_else(|| env::panic_str(ERR_BALANCE_OVERFLOW));
+            .unwrap_or_else(|| env::panic_str(Self::ERR_BALANCE_OVERFLOW));
 
         let Some(notify) = notify else {
             // no transfer notification, all tokens received
@@ -194,7 +191,7 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
         if let Some(StateInitArgs { state_init, state_init_amount }) = notify.state_init {
             deposit_left = deposit_left
                 .checked_sub(state_init_amount)
-                .unwrap_or_else(|| env::panic_str(ERR_DEPOSIT));
+                .unwrap_or_else(|| env::panic_str(Self::ERR_INSUFFICIENT_DEPOSIT));
 
             p = p.state_init(state_init, state_init_amount);
         }
@@ -202,7 +199,7 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
         // check that there was enough attached deposit
         deposit_left = deposit_left
             .checked_sub(notify.forward_deposit)
-            .unwrap_or_else(|| env::panic_str(ERR_DEPOSIT));
+            .unwrap_or_else(|| env::panic_str(Self::ERR_INSUFFICIENT_DEPOSIT));
 
         // refund excess deposit (only if more than 1yN)
         if deposit_left > NearToken::from_yoctonear(1) {
@@ -227,7 +224,7 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
             .into()
     }
 
-    /// Burn given `amount` and notify [`minter_id::sft_on_burn()`](super::minter::SharedFungibleTokenBurner::sft_on_burn).
+    /// Burn given `amount` and notify [`minter_id::sft_on_burn()`](super::minter::ShardedFungibleTokenBurner::sft_on_burn).
     /// If `minter_id` doesn't support burning or returns partial
     /// `used_amount`, then `amount - used_amount` will be minter back
     /// on `sender_id`.
@@ -238,17 +235,28 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
     /// If the minter-contract doesn't support burning, these tokens
     /// will be minted back on burner wallet-contract.
     ///
-    /// Returns `burned_amount`
+    /// Returns `burned_amount`.
     #[payable]
-    fn sft_burn<'nearinput>(&mut self, amount: U128, msg: String) -> PromiseOrValue<U128> {
+    fn sft_burn(
+        &mut self,
+        amount: U128,
+        #[allow(unused_variables)] custom_payload: Option<String>, // not used
+        msg: String,
+    ) -> PromiseOrValue<U128> {
         let deposit = env::attached_deposit();
-        require!(deposit >= NearToken::from_yoctonear(1), ERR_DEPOSIT);
-        require!(env::predecessor_account_id() == *self.owner_id, ERR_NOT_OWNER);
+        require!(deposit >= NearToken::from_yoctonear(1), Self::ERR_INSUFFICIENT_DEPOSIT);
+
+        let caller = env::predecessor_account_id();
+
+        #[cfg(feature = "sft-wallet-governed-impl")]
+        require!(caller == *self.owner_id || caller == *self.minter_id, Self::ERR_NOT_OWNER);
+        #[cfg(not(feature = "sft-wallet-governed-impl"))]
+        require!(caller == *self.owner_id, Self::ERR_NOT_OWNER);
 
         self.balance = self
             .balance
             .checked_sub(amount.0)
-            .unwrap_or_else(|| env::panic_str(ERR_INSUFFICIENT_BALANCE));
+            .unwrap_or_else(|| env::panic_str(Self::ERR_INSUFFICIENT_BALANCE));
 
         ext_sft_burner::ext(self.minter_id.as_ref().to_owned())
             // forward all attached deposit
@@ -299,7 +307,7 @@ impl SFTWalletContract {
                 .checked_add(refund_amount)
                 // this is the only place where we do panic but it's ok,
                 // since it can only happen because of the faulty minter
-                .unwrap_or_else(|| env::panic_str(ERR_BALANCE_OVERFLOW))
+                .unwrap_or_else(|| env::panic_str(Self::ERR_BALANCE_OVERFLOW))
         } else {
             // refund maximum what we can
             refund_amount = refund_amount.min(self.balance);
@@ -314,6 +322,13 @@ impl SFTWalletContract {
 }
 
 impl SFTWalletContract {
+    const ERR_NOT_OWNER: &str = "not owner";
+    const ERR_SELF_TRANSFER: &str = "self-transfer";
+    const ERR_WRONG_WALLET: &str = "wrong wallet";
+    const ERR_INSUFFICIENT_BALANCE: &str = "insufficient balance";
+    const ERR_BALANCE_OVERFLOW: &str = "balance overflow";
+    const ERR_INSUFFICIENT_DEPOSIT: &str = "insufficient attached deposit";
+
     #[inline]
     pub fn sft_wallet_init_for(&self, owner_id: &AccountIdRef) -> StateInit {
         StateInit::code(env::current_contract_code())
@@ -326,16 +341,42 @@ impl SFTWalletContract {
     }
 }
 
-const ERR_NOT_OWNER: &str = "not owner";
-const ERR_SELF_TRANSFER: &str = "self-transfer";
-const ERR_WRONG_WALLET: &str = "wrong wallet";
-const ERR_INSUFFICIENT_BALANCE: &str = "insufficient balance";
-const ERR_BALANCE_OVERFLOW: &str = "balance overflow";
-const ERR_DEPOSIT: &str = "insufficient attached deposit";
+#[cfg(feature = "sft-wallet-governed-impl")]
+const _: () = {
+    #[near]
+    impl SFTWalletContract {
+        #[allow(dead_code)]
+        #[payable]
+        pub fn sft_set_status(&mut self, status: u8) {
+            require!(
+                env::attached_deposit() == NearToken::from_yoctonear(1),
+                Self::ERR_INSUFFICIENT_DEPOSIT
+            );
+            require!(env::predecessor_account_id() == *self.minter_id, Self::ERR_WRONG_WALLET);
+            self.status = status;
+        }
+    }
+
+    impl SFTWalletContract {
+        const ERR_LOCKED: &str = "wallet is locked";
+
+        const OUTGOING_TRANSFERS_LOCKED_FLAG: u8 = 1 << 0;
+        const INCOMING_TRANSFERS_LOCKED_FLAG: u8 = 1 << 1;
+
+        pub fn is_outgoing_transfers_locked(&self) -> bool {
+            self.status & Self::OUTGOING_TRANSFERS_LOCKED_FLAG
+                == Self::OUTGOING_TRANSFERS_LOCKED_FLAG
+        }
+
+        pub fn is_incoming_transfers_locked(&self) -> bool {
+            self.status & Self::INCOMING_TRANSFERS_LOCKED_FLAG
+                == Self::INCOMING_TRANSFERS_LOCKED_FLAG
+        }
+    }
+};
 
 #[cfg(test)]
 mod tests {
-    use std::u128;
 
     use super::*;
 

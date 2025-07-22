@@ -4,6 +4,9 @@ use near_sdk::{ext_contract, json_types::U128, AccountId, ContractCode, PromiseO
 
 /// # Sharded Fungible Token Minter
 ///
+/// This is a contracts that is allowed to mint new tokens to and burn them from
+/// [wallet-contracts](super::wallet::ShardedFungibleTokenWallet).
+///
 /// See [Jetton minter](https://docs.ton.org/v3/guidelines/dapps/asset-processing/jettons#jetton-minter).
 #[ext_contract(ext_sft_minter)]
 pub trait ShardedFungibleTokenMinter {

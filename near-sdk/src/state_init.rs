@@ -86,10 +86,10 @@ impl StateInit {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ContractCode {
     /// Reference global contract's code by its hash
-    CodeHash(#[serde_as(as = "Base64")] CryptoHash),
+    GlobalCodeHash(#[serde_as(as = "Base64")] CryptoHash),
 
     /// Reference global contract's code by its [`AccountId`]
-    AccountId(AccountId),
+    GlobalAccountId(AccountId),
 }
 
 impl ContractCode {
@@ -99,8 +99,8 @@ impl ContractCode {
         // Here is nearcore implementation:
         // https://github.com/near/nearcore/blob/685f92e3b9efafc966c9dafcb7815f172d4bb557/core/primitives-core/src/account.rs#L123-L128
         match self {
-            Self::CodeHash(hash) => hash.len() as StorageUsage,
-            Self::AccountId(account_id) => account_id.len() as StorageUsage,
+            Self::GlobalCodeHash(hash) => hash.len() as StorageUsage,
+            Self::GlobalAccountId(account_id) => account_id.len() as StorageUsage,
         }
     }
 }
@@ -108,14 +108,14 @@ impl ContractCode {
 impl From<CryptoHash> for ContractCode {
     #[inline]
     fn from(hash: CryptoHash) -> Self {
-        Self::CodeHash(hash)
+        Self::GlobalCodeHash(hash)
     }
 }
 
 impl From<AccountId> for ContractCode {
     #[inline]
     fn from(account_id: AccountId) -> Self {
-        Self::AccountId(account_id)
+        Self::GlobalAccountId(account_id)
     }
 }
 

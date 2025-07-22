@@ -1,7 +1,9 @@
+#![allow(clippy::too_many_arguments)]
+
 #[cfg(feature = "sft-wallet-impl")]
 mod impl_;
 
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::BTreeMap};
 
 use near_sdk::{
     ext_contract,
@@ -14,26 +16,11 @@ use near_sdk::{
 use crate::contract_state::ContractState;
 
 /// # Sharded Fungible Token wallet-contract
-//
-/// The design is highly inspired by [Jetton](https://docs.ton.org/v3/guidelines/dapps/asset-processing/jettons#jetton-architecture)
-/// standard except for following differences:
-/// * Unlike TVM, Near doesn't support [message bouncing](https://docs.ton.org/v3/documentation/smart-contracts/transaction-fees/forward-fees#message-bouncing),
-///   so instead we can schedule callbacks, which gives more control over
-///   handling of failed cross-contract calls.
-/// * TVM doesn't differentiate between gas and attached deposit, while
-///   in Near they are not coupled, which removes some complexities.
 ///
-/// ## Events
-///
-/// Similar to Jetton standard, there is no logging of such events as
-/// `sft_transfer`, `sft_mint` or `sft_burn` as it simply wouldn't bring any
-/// value for indexers. Even if we do emit these events, indexers are still
-/// forced to track `sft_transfer` function calls to not-yet-existing
-/// wallet-contracts, which will emit these events.
-/// However, to properly track these cross-contract calls they would need
-/// parse function names (i.e. `sft_transfer()`, `sft_receive()`, `sft_burn()`
-/// and `sft_resolve()`) and their args, while this information combined with
-/// receipt status already contains all necessary info for indexing.
+/// This is a contract that holds:
+/// * owner's balance
+/// * owner's [`AccountId`]
+/// * [minter](super::minter::ShardedFungibleTokenMinter)'s [`AccountId`]
 #[ext_contract(ext_sft_wallet)]
 pub trait ShardedFungibleTokenWallet {
     /// View method to get all data at once
@@ -41,50 +28,48 @@ pub trait ShardedFungibleTokenWallet {
 
     /// Transfer given `amount` of tokens to `receiver_id`.
     ///
-    /// Requires at least 1 yoctoNear attached deposit.
+    /// Unless `no_init` is set, requires additional attached deposit to pay for
+    /// automatic deployment and initialization of receiver's wallet-contract.
+    /// If by the time the created receipt gets executed it turns out to be
+    /// already deployed, then reserved NEAR tokens refunded to `refund_to` or
+    /// predecessor, if not set. See [`near_sdk::StateInit`] and
+    /// [`near_sdk::env::promise_set_refund_to()`].
     ///
-    /// If `init_receiver_wallet_or_refund_to` is set, then requires
-    /// at least [`ShardedFungibleTokenWalletData::MIN_BALANCE`]
-    /// attached deposit to reserve for deploying receiver's
-    /// wallet-contract if it doesn't exist. If it turned out to be
-    /// already deployed, then reserved NEAR tokens are sent to
-    /// `init_receiver_wallet_or_refund_to`.
-    ///
-    /// If `notify` is set, then `receiver_id::sft_on_transfer()`
-    /// will be called. If `notify.state_init` is set, then
-    /// `receiver_id` will be initialized if doesn't exist.
-    ///
-    /// Remaining attached deposit is forwarded to `receiver_id::sft_on_transfer()`.
+    /// If `notify` is set, then [`receiver_id::sft_on_transfer()`](super::receiver::ShardedFungibleTokenReceiver)
+    /// will be called. If `notify.state_init` is set, then `receiver_id` will
+    /// be initialized if doesn't exist. See [`TransferNotification`].
     ///
     /// Returns `used_amount`.
     ///
-    /// Note: must be #[payable]
+    /// In order to allow for more flexibity while having a common interface,
+    /// implementations MAY use `custom_payload` for extended functionality,
+    /// such as [mintless tokens](https://github.com/ton-blockchain/mintless-jetton-contract).
+    ///
+    /// Note: MUST be `#[payable]` and require at least 1yN attached.
     fn sft_transfer(
         &mut self,
         receiver_id: AccountId,
         amount: U128,
-        memo: Option<String>, // TODO: custom_payload
+        custom_payload: Option<String>,
+        memo: Option<String>,
         notify: Option<TransferNotification>,
-        // TODO: rename: refund_deposit_to?
         refund_to: Option<AccountId>,
         no_init: Option<bool>,
-        // TODO: custom_payload (e.g. mintless jetton)
-        // https://github.com/ton-blockchain/mintless-jetton-contract/blob/77763e6b2df6cf96b0840c7306844751200ff046/contracts/jetton-wallet.fc#L59
-        // TODO: delete_my_if_zero
     ) -> PromiseOrValue<U128>;
 
-    /// Receives tokens from minter-contract or wallet-contracts initialized
-    /// for the same minter-contract.
+    /// Receives tokens from [minter-contract](super::minter::ShardedFungibleTokenMinter)
+    /// or wallet-contracts initialized for the same minter-contract.
     ///
     /// If `notify` is set, then `receiver_id::sft_on_transfer()` will be
     /// called. If `notify.state_init` is set, then `receiver_id` will be
     /// initialized if doesn't exist.
     ///
-    /// Remaining attached deposit is forwarded to `receiver_id::sft_on_transfer()`.
+    /// Remaining attached deposit is refunded to `refund_to` or `sender_id`
+    /// if not set.
     ///
     /// Returns `used_amount`.
     ///
-    /// Note: must be #[payable] and require at least 1yN attached.
+    /// Note: MUST be `#[payable]` and require at least 1yN attached.
     fn sft_receive(
         &mut self,
         sender_id: AccountId,
@@ -94,7 +79,7 @@ pub trait ShardedFungibleTokenWallet {
         refund_to: Option<AccountId>,
     ) -> PromiseOrValue<U128>;
 
-    /// Burn given `amount` and notify [`minter_id::sft_on_burn()`](super::minter::SharedFungibleTokenBurner::sft_on_burn).
+    /// Burn given `amount` and notify [`minter_id::sft_on_burn()`](super::minter::ShardedFungibleTokenBurner::sft_on_burn).
     /// If `minter_id` doesn't support burning or returns partial
     /// `used_amount`, then `amount - used_amount` will be minter back
     /// on `sender_id`.
@@ -107,20 +92,41 @@ pub trait ShardedFungibleTokenWallet {
     ///
     /// Returns `burned_amount`.
     ///
-    /// Note: must be #[payable] and require at least 1yN attached
-    fn sft_burn(&mut self, amount: U128, msg: String) -> PromiseOrValue<U128>;
+    /// In order to allow for more flexibity while having a common interface,
+    /// implementations MAY use `custom_payload` for extended functionality,
+    /// such as [mintless tokens](https://github.com/ton-blockchain/mintless-jetton-contract).
+    ///
+    /// Note: MUST be `#[payable]` and require at least 1yN attached
+    fn sft_burn(
+        &mut self,
+        amount: U128,
+        custom_payload: Option<String>,
+        msg: String,
+    ) -> PromiseOrValue<U128>;
 }
 
 /// Sharded Fungible Token wallet-contract data
 #[near(serializers = [borsh, json])]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SFTWalletData<'a> {
-    pub status: u8, // TODO: #[cfg(feature = "sft-wallet-governed")]?
+    /// Optional status to be used by extended implementations, such as
+    /// [governed tokens](https://github.com/ton-blockchain/stablecoin-contract/tree/main), or for future upgrades.
+    pub status: u8,
+
+    /// Balance of the owner
     #[serde_as(as = "DisplayFromStr")]
     pub balance: u128,
+
+    /// Owner's [`AccountId`]
     pub owner_id: Cow<'a, AccountIdRef>,
+
+    /// [Minter](super::minter::ShardedFungibleTokenMinter)'s [`AccountId`]
     pub minter_id: Cow<'a, AccountIdRef>,
-    // TODO: extra T
+
+    /// Extra information that can be used by extended implementations such as
+    /// [mintless tokens](https://github.com/ton-blockchain/mintless-jetton-contract).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub extra: BTreeMap<String, String>,
 }
 
 impl<'a> SFTWalletData<'a> {
@@ -134,7 +140,13 @@ impl<'a> SFTWalletData<'a> {
         owner_id: impl Into<Cow<'a, AccountIdRef>>,
         minter_id: impl Into<Cow<'a, AccountIdRef>>,
     ) -> Self {
-        Self { status: 0, balance: 0, owner_id: owner_id.into(), minter_id: minter_id.into() }
+        Self {
+            status: 0,
+            balance: 0,
+            owner_id: owner_id.into(),
+            minter_id: minter_id.into(),
+            extra: BTreeMap::new(),
+        }
     }
 
     #[inline]
@@ -183,7 +195,6 @@ impl TransferNotification {
     }
 }
 
-/// TODO: docs
 #[near(serializers=[borsh, json])]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateInitArgs {

@@ -1239,7 +1239,7 @@ pub fn promise_batch_action_function_call_weight(
 /// [NEP-616](https://github.com/near/NEPs/pull/616).
 ///
 /// Note that the `receiver_id` of the [`Promise`](crate::Promise) MUST be
-/// equal to [`state_init.derive_account_id()`](StateInit::derive_account_id).
+/// equal to [`state_init.derive_account_id()`](LazyStateInit::derive_account_id).
 /// Otherwise, this promise will fail.
 ///
 /// If non-zero, `amount` will be immediately subtracted from current

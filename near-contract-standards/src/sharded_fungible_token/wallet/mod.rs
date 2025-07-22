@@ -168,10 +168,11 @@ pub struct TransferNotification {
     #[serde(flatten, default, skip_serializing_if = "Option::is_none")]
     pub state_init: Option<StateInitArgs>,
 
-    /// Message to pass in [`receiver_id::sft_on_transfer()`](super::receiver::ShardedFungibleTokenReceiver::sft_on_transfer)
+    /// Message to pass in [`receiver_id::sft_on_receive()`](super::receiver::ShardedFungibleTokenReceiver::sft_on_receive)
     pub msg: String,
 
-    /// Amount of NEAR tokens to attach to `receiver_id::sft_on_transfer()` call.
+    /// Amount of NEAR tokens to attach to `[`receiver_id::sft_on_receive()`](super::receiver::ShardedFungibleTokenReceiver::sft_on_receive)
+    /// call.
     #[serde(default, skip_serializing_if = "NearToken::is_zero")]
     pub forward_deposit: NearToken,
 }

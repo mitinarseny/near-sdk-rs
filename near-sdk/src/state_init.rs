@@ -242,3 +242,21 @@ impl BorshDeserialize for LazyStateInitInner {
         BorshDeserialize::deserialize_reader(reader).map(Self::StateInit)
     }
 }
+
+#[cfg(feature = "abi")]
+const _: () = {
+    use borsh::{
+        schema::{Declaration, Definition},
+        BorshSchema,
+    };
+
+    impl BorshSchema for LazyStateInitInner {
+        fn add_definitions_recursively(definitions: &mut BTreeMap<Declaration, Definition>) {
+            <StateInit as BorshSchema>::add_definitions_recursively(definitions);
+        }
+
+        fn declaration() -> Declaration {
+            <StateInit as BorshSchema>::declaration()
+        }
+    }
+};

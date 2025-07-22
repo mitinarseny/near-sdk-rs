@@ -159,7 +159,7 @@ impl ShardedFungibleTokenBurner for Ft2SftContract {
 
             p = ext_storage_management::ext_on(p)
                 .with_attached_deposit(burn.storage_deposit)
-                .with_static_gas(Gas::from_tgas(10))
+                .with_static_gas(Self::STORAGE_DEPOSIT_GAS)
                 // do not distribute remaining gas here
                 .with_unused_gas_weight(0)
                 .storage_deposit(Some(receiver_id.clone()), None)
@@ -202,6 +202,7 @@ impl ShardedFungibleTokenBurner for Ft2SftContract {
 
 #[near]
 impl Ft2SftContract {
+    const STORAGE_DEPOSIT_GAS: Gas = Gas::from_tgas(10);
     const FT_TRANSFER_MIN_GAS: Gas = Gas::from_tgas(10);
     const FT_TRANSFER_CALL_MIN_GAS: Gas = Gas::from_tgas(30);
     const RESOLVE_TRANSFER_GAS: Gas = Gas::from_tgas(5);

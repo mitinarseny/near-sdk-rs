@@ -103,15 +103,16 @@ pub fn near(attr: TokenStream, item: TokenStream) -> TokenStream {
     let string_serde_with_crate = quote! {#near_sdk_crate::serde_with}.to_string();
 
     let mut expanded = quote! {};
+
+    let mut has_borsh = args.near_bindgen_args.contract_state.is_some();
+    let mut has_json = false;
+
+    let mut borsh_attr = quote! {};
+
     if args.near_bindgen_args.contract_state.is_some() {
         let near_bindgen_args = args.near_bindgen_args;
         expanded = quote! {#[#near_sdk_crate::near_bindgen(#near_bindgen_args)]};
     };
-
-    let mut has_borsh = false;
-    let mut has_json = false;
-
-    let mut borsh_attr = quote! {};
 
     match args.serializers {
         Some(serializers) => {

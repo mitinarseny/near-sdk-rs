@@ -15,11 +15,24 @@ pub(crate) fn generate_ext_structs(
         /// API for calling this contract's functions in a subsequent execution.
         pub fn ext(account_id: ::near_sdk::AccountId) -> #name {
             #name {
-                account_id,
+                promise_or_create_on: ::near_sdk::PromiseOrValue::Value(account_id),
+                refund_to: None,
+                state_init: None,
                 deposit: ::near_sdk::NearToken::from_near(0),
                 static_gas: ::near_sdk::Gas::from_gas(0),
                 gas_weight: ::near_sdk::GasWeight::default(),
+            }
+        }
+        /// API for calling this contract's functions as additional action
+        /// on already created promise.
+        pub fn ext_on(promise: ::near_sdk::Promise) -> #name {
+            #name {
+                promise_or_create_on: ::near_sdk::PromiseOrValue::Promise(promise),
+                refund_to: None,
                 state_init: None,
+                deposit: ::near_sdk::NearToken::from_near(0),
+                static_gas: ::near_sdk::Gas::from_gas(0),
+                gas_weight: ::near_sdk::GasWeight::default(),
             }
         }
     };
@@ -35,14 +48,30 @@ pub(crate) fn generate_ext_structs(
     quote! {
       #[must_use]
       pub struct #name {
-          pub(crate) account_id: ::near_sdk::AccountId,
+          pub(crate) promise_or_create_on: ::near_sdk::PromiseOrValue<::near_sdk::AccountId>,
+          pub(crate) refund_to: Option<::near_sdk::AccountId>,
+          pub(crate) state_init: Option<(
+            ::near_sdk::LazyStateInit,
+            ::near_sdk::NearToken,
+          )>,
           pub(crate) deposit: ::near_sdk::NearToken,
           pub(crate) static_gas: ::near_sdk::Gas,
           pub(crate) gas_weight: ::near_sdk::GasWeight,
-          pub(crate) state_init: Option<::near_sdk::StateInitArgs>,
       }
 
       impl #name {
+          pub fn with_refund_to(mut self, account_id: ::near_sdk::AccountId) -> Self {
+              self.refund_to = Some(account_id);
+              self
+          }
+          pub fn with_state_init(
+            mut self,
+            state_init: impl Into<::near_sdk::LazyStateInit>,
+            amount: ::near_sdk::NearToken,
+          ) -> Self {
+              self.state_init = Some((state_init.into(), amount));
+              self
+          }
           pub fn with_attached_deposit(mut self, amount: ::near_sdk::NearToken) -> Self {
               self.deposit = amount;
               self
@@ -54,13 +83,6 @@ pub(crate) fn generate_ext_structs(
           pub fn with_unused_gas_weight(mut self, gas_weight: u64) -> Self {
               self.gas_weight = ::near_sdk::GasWeight(gas_weight);
               self
-          }
-          pub fn with_state_init(
-            mut self,
-            state_init: Option<::near_sdk::StateInitArgs>,
-          ) -> Self {
-            self.state_init = state_init;
-            self
           }
       }
 
@@ -138,15 +160,17 @@ fn generate_ext_function(attr_signature_info: &AttrSigInfo) -> TokenStream2 {
         #new_non_bindgen_attrs
         pub fn #ident #generics(self, #pat_type_list) -> ::near_sdk::Promise {
             let __args = #serialize;
-            let mut __promise = ::near_sdk::Promise::new(self.account_id);
-            if let Some(state_init) = self.state_init {
-                __promise = __promise.state_init(
-                    state_init.state_init,
-                    state_init.amount,
-                    state_init.gas,
-                    ::near_sdk::GasWeight(0),
-                    state_init.refund_to,
-                );
+            let mut __promise = match self.promise_or_create_on {
+                ::near_sdk::PromiseOrValue::Promise(p) => p,
+                ::near_sdk::PromiseOrValue::Value(account_id) => {
+                    ::near_sdk::Promise::new(account_id)
+                }
+            };
+            if let Some(refund_to) = self.refund_to {
+                __promise = __promise.refund_to(refund_to);
+            }
+            if let Some((state_init, amount)) = self.state_init {
+                __promise = __promise.state_init(state_init, amount);
             }
             __promise.function_call_weight(
                 ::std::string::String::from(#ident_str),

@@ -1,9 +1,17 @@
+#[cfg(feature = "sft-wallet-impl")]
+mod impl_;
+
 use std::borrow::Cow;
 
 use near_sdk::{
-    borsh, ext_contract, json_types::U128, near, AccountId, AccountIdRef, ContractCode, Gas,
-    NearToken, PromiseOrValue, StateInit, StateInitArgs, StateInitFunctionCall,
+    ext_contract,
+    json_types::U128,
+    near,
+    serde_with::{serde_as, DisplayFromStr},
+    AccountId, AccountIdRef, ContractStorage, Gas, LazyStateInit, NearToken, PromiseOrValue,
 };
+
+use crate::contract_state::ContractState;
 
 /// # Sharded Fungible Token wallet-contract
 //
@@ -22,23 +30,14 @@ use near_sdk::{
 /// value for indexers. Even if we do emit these events, indexers are still
 /// forced to track `sft_transfer` function calls to not-yet-existing
 /// wallet-contracts, which will emit these events.
-///
 /// However, to properly track these cross-contract calls they would need
 /// parse function names (i.e. `sft_transfer()`, `sft_receive()`, `sft_burn()`
 /// and `sft_resolve()`) and their args, while this information combined with
 /// receipt status already contains all necessary info for indexing.
-#[ext_contract(sft_wallet)]
+#[ext_contract(ext_sft_wallet)]
 pub trait ShardedFungibleTokenWallet {
-    /// Intialize contract's state.
-    ///
-    /// Must be annotated with `#[init]`.
-    fn init(
-        // we use borsh for deterministic serialization
-        #[serializer(borsh)] init_args: InitArgs<'static>,
-    ) -> ShardedFungibleTokenWalletData;
-
     /// View method to get all data at once
-    fn sft_wallet_data(&self) -> &ShardedFungibleTokenWalletData;
+    fn sft_wallet_data(self) -> ContractState<SFTWalletData<'static>>;
 
     /// Transfer given `amount` of tokens to `receiver_id`.
     ///
@@ -60,13 +59,18 @@ pub trait ShardedFungibleTokenWallet {
     /// Returns `used_amount`.
     ///
     /// Note: must be #[payable]
-    fn sft_transfer(
+    fn sft_transfer<'nearinput>(
         &mut self,
         receiver_id: AccountId,
         amount: U128,
-        memo: Option<String>,
-        notify: Option<TransferNotificaton>,
-        init_receiver_wallet_or_refund_to: Option<AccountId>,
+        memo: Option<String>, // TODO: custom_payload
+        notify: Option<TransferNotification>,
+        // TODO: rename: refund_deposit_to?
+        refund_to: Option<AccountId>,
+        no_init: Option<bool>,
+        // TODO: custom_payload (e.g. mintless jetton)
+        // https://github.com/ton-blockchain/mintless-jetton-contract/blob/77763e6b2df6cf96b0840c7306844751200ff046/contracts/jetton-wallet.fc#L59
+        // TODO: delete_my_if_zero
     ) -> PromiseOrValue<U128>;
 
     /// Receives tokens from minter-contract or wallet-contracts initialized
@@ -81,12 +85,13 @@ pub trait ShardedFungibleTokenWallet {
     /// Returns `used_amount`.
     ///
     /// Note: must be #[payable] and require at least 1yN attached.
-    fn sft_receive(
+    fn sft_receive<'nearinput>(
         &mut self,
         sender_id: AccountId,
         amount: U128,
         memo: Option<String>,
-        notify: Option<TransferNotificaton>,
+        notify: Option<TransferNotification>,
+        refund_to: Option<AccountId>,
     ) -> PromiseOrValue<U128>;
 
     /// Burn given `amount` and notify [`minter_id::sft_on_burn()`](super::minter::SharedFungibleTokenBurner::sft_on_burn).
@@ -103,88 +108,87 @@ pub trait ShardedFungibleTokenWallet {
     /// Returns `burned_amount`.
     ///
     /// Note: must be #[payable] and require at least 1yN attached
-    fn sft_burn(&mut self, amount: U128, msg: String) -> PromiseOrValue<U128>;
-
-    /// Gets result from `sft_receive()`, `sft_on_transfer()`
-    /// or `sft_on_burn()`, adjusts the balance accordingly
-    /// and returns `used_amount`.
-    ///
-    /// Note: must be #[private]
-    fn sft_resolve(&mut self, amount: U128, sender: bool) -> U128;
+    fn sft_burn<'nearinput>(&mut self, amount: U128, msg: String) -> PromiseOrValue<U128>;
 }
 
 /// Sharded Fungible Token wallet-contract data
-#[cfg_attr(
-    not(feature = "sharded_fungible_token_wallet_impl"),
-    near(serializers = [borsh, json]),
-)]
-#[cfg_attr(
-    feature = "sharded_fungible_token_wallet_impl",
-    near(contract_state, serializers = [borsh, json]),
-    derive(::near_sdk::PanicOnDefault),
-)]
+#[near(serializers = [borsh, json])]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ShardedFungibleTokenWalletData {
-    pub owner_id: AccountId,
-    pub minter_id: AccountId,
-    pub balance: U128,
+pub struct SFTWalletData<'a> {
+    pub status: u8, // TODO: #[cfg(feature = "sft-wallet-governed")]?
+    #[serde_as(as = "DisplayFromStr")]
+    pub balance: u128,
+    pub owner_id: Cow<'a, AccountIdRef>,
+    pub minter_id: Cow<'a, AccountIdRef>,
+    // TODO: extra T
 }
 
-impl ShardedFungibleTokenWalletData {
+impl<'a> SFTWalletData<'a> {
+    const STATE_KEY: &'static [u8] = b"";
     // TODO: calculate exact values
-    pub const MIN_BALANCE: NearToken = NearToken::from_millinear(500);
-    pub const INIT_GAS: Gas = Gas::from_tgas(5);
     pub const SFT_RECEIVE_MIN_GAS: Gas = Gas::from_tgas(5);
     pub const SFT_RESOLVE_GAS: Gas = Gas::from_tgas(5);
 
-    /// Deteministically derive [`AccountId`] of a wallet-contract
-    /// with given `wallet_code` and `minter_id` for given `owner_id`
-    pub fn wallet_account_id(
-        wallet_code: ContractCode,
-        owner_id: &AccountIdRef,
-        minter_id: &AccountIdRef,
-    ) -> AccountId {
-        Self::state_init_for(wallet_code, owner_id, minter_id).derived_account_id()
+    #[inline]
+    pub fn init(
+        owner_id: impl Into<Cow<'a, AccountIdRef>>,
+        minter_id: impl Into<Cow<'a, AccountIdRef>>,
+    ) -> Self {
+        Self { status: 0, balance: 0, owner_id: owner_id.into(), minter_id: minter_id.into() }
     }
 
-    /// Prepare `StateInit` for a wallet-contract with given `wallet_code` and
-    /// `minter_id` for given `owner_id`
-    pub fn state_init_for(
-        wallet_code: ContractCode,
-        owner_id: &AccountIdRef,
-        minter_id: &AccountIdRef,
-    ) -> StateInit {
-        StateInit {
-            code: wallet_code,
-            init_call: Some(StateInitFunctionCall {
-                function_name: "init".to_string(),
-                args: borsh::to_vec(&InitArgs {
-                    owner_id: Cow::Borrowed(owner_id),
-                    minter_id: Cow::Borrowed(minter_id),
-                })
-                .unwrap()
-                .into(),
-            }),
-        }
+    #[inline]
+    pub fn init_state(
+        owner_id: impl Into<Cow<'a, AccountIdRef>>,
+        minter_id: impl Into<Cow<'a, AccountIdRef>>,
+    ) -> ContractStorage {
+        ContractStorage::new().borsh(&Self::STATE_KEY, &Self::init(owner_id, minter_id))
     }
 }
 
-/// Init args for `.init()`
-#[near(serializers = [borsh])]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InitArgs<'a> {
-    pub owner_id: Cow<'a, AccountIdRef>,
-    pub minter_id: Cow<'a, AccountIdRef>,
-}
-
-/// Arguments for constructing `receiver_id::sft_on_transfer()` notification
+/// Arguments for constructing [`receiver_id::sft_on_receive()`](super::receiver::ShardedFungibleTokenReceiver::sft_on_receive) notification.
 #[near(serializers = [borsh, json])]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TransferNotificaton {
-    /// Message be passed in `receiver_id::sft_on_transfer()`
-    pub msg: String,
+pub struct TransferNotification {
     /// Optionally, deploy & init `receiver_id` contract if didn't exist.
-    /// It enables for better composability when transferring to other sharded
-    /// contracts, which doesn't exist yet.
+    /// It enables for better composability when transferring to other
+    /// not-yet-initialized owner contracts.
+    #[serde(flatten, default, skip_serializing_if = "Option::is_none")]
     pub state_init: Option<StateInitArgs>,
+
+    /// Message to pass in [`receiver_id::sft_on_transfer()`](super::receiver::ShardedFungibleTokenReceiver::sft_on_transfer)
+    pub msg: String,
+
+    /// Amount of NEAR tokens to attach to `receiver_id::sft_on_transfer()` call.
+    #[serde(default, skip_serializing_if = "NearToken::is_zero")]
+    pub forward_deposit: NearToken,
+}
+
+impl TransferNotification {
+    #[inline]
+    pub fn msg(msg: String) -> Self {
+        Self { state_init: None, msg: msg.into(), forward_deposit: NearToken::from_yoctonear(0) }
+    }
+
+    #[inline]
+    pub fn state_init(mut self, state_init: LazyStateInit, amount: NearToken) -> Self {
+        self.state_init = Some(StateInitArgs { state_init, state_init_amount: amount });
+        self
+    }
+
+    #[inline]
+    pub fn forward_deposit(mut self, amount: NearToken) -> Self {
+        self.forward_deposit = amount;
+        self
+    }
+}
+
+/// TODO: docs
+#[near(serializers=[borsh, json])]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StateInitArgs {
+    pub state_init: LazyStateInit,
+
+    #[serde(default, skip_serializing_if = "NearToken::is_zero")]
+    pub state_init_amount: NearToken,
 }

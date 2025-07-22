@@ -22,3 +22,4 @@ pub mod upgrade;
 pub(crate) mod event;
 
 pub mod contract_metadata;
+pub mod contract_state;

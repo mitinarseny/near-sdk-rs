@@ -11,6 +11,15 @@ categories = ["wasm"]
 repository = "https://github.com/near/near-sdk-rs"
 homepage = "https://docs.near.org/"
 
+[profile.release]
+codegen-units = 1
+opt-level = 3
+lto = true
+debug = false
+strip = "symbols"
+panic = "abort"
+overflow-checks = true
+
 # Special triple # comment for ci.
 [patch.crates-io]
 ### borsh = { git = "https://github.com/near/borsh-rs", branch = "master" }

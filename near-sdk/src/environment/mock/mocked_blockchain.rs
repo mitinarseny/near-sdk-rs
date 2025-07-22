@@ -211,6 +211,10 @@ mod mock_chain {
         with_mock_interface(|b| b.current_account_id(register_id))
     }
     #[no_mangle]
+    extern "C-unwind" fn current_contract_code(_register_id: u64) -> u8 {
+        unimplemented!("TBD")
+    }
+    #[no_mangle]
     extern "C-unwind" fn signer_account_id(register_id: u64) {
         with_mock_interface(|b| b.signer_account_id(register_id))
     }
@@ -405,6 +409,14 @@ mod mock_chain {
         with_mock_interface(|b| b.promise_batch_then(promise_index, account_id_len, account_id_ptr))
     }
     #[no_mangle]
+    extern "C-unwind" fn promise_set_refund_to(
+        _promise_index: u64,
+        _account_id_len: u64,
+        _account_id_ptr: u64,
+    ) {
+        unimplemented!("TBD")
+    }
+    #[no_mangle]
     extern "C-unwind" fn promise_batch_action_create_account(promise_index: u64) {
         with_mock_interface(|b| b.promise_batch_action_create_account(promise_index))
     }
@@ -417,6 +429,15 @@ mod mock_chain {
         with_mock_interface(|b| {
             b.promise_batch_action_deploy_contract(promise_index, code_len, code_ptr)
         })
+    }
+    #[no_mangle]
+    extern "C-unwind" fn promise_batch_action_state_init(
+        _promise_index: u64,
+        _state_init_len: u64,
+        _state_init_ptr: u64,
+        _amount_ptr: u64,
+    ) {
+        unimplemented!("TBD")
     }
     #[no_mangle]
     extern "C-unwind" fn promise_batch_action_function_call(
@@ -585,12 +606,28 @@ mod mock_chain {
         with_mock_interface(|b| b.promise_results_count())
     }
     #[no_mangle]
+    extern "C-unwind" fn promise_result_length(_result_idx: u64, _register_id: u64) -> u64 {
+        unimplemented!("TBD")
+    }
+    #[no_mangle]
     extern "C-unwind" fn promise_result(result_idx: u64, register_id: u64) -> u64 {
         with_mock_interface(|b| b.promise_result(result_idx, register_id))
     }
     #[no_mangle]
     extern "C-unwind" fn promise_return(promise_id: u64) {
         with_mock_interface(|b| b.promise_return(promise_id))
+    }
+    #[no_mangle]
+    extern "C-unwind" fn storage_config_amount_per_byte(_amount_ptr: u64) {
+        unimplemented!("TBD")
+    }
+    #[no_mangle]
+    extern "C-unwind" fn storage_config_num_bytes_account() -> u64 {
+        unimplemented!("TBD")
+    }
+    #[no_mangle]
+    extern "C-unwind" fn storage_config_num_extra_bytes_record() -> u64 {
+        unimplemented!("TBD")
     }
     #[no_mangle]
     extern "C-unwind" fn storage_write(

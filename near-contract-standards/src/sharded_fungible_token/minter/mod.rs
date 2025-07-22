@@ -23,6 +23,8 @@ pub trait ShardedFungibleTokenMinter {
     fn sft_wallet_account_id(&self, owner_id: AccountId) -> AccountId;
 }
 
+/// Common data for all [minter-contract](ShardedFungibleTokenMinter)
+/// implementations.
 #[near(serializers = [borsh, json])]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SftMinterData {

@@ -1,5 +1,3 @@
-// mod utils;
-
 use impl_tools::autoimpl;
 use near_sdk::{
     env::{self, TooLongError},
@@ -20,6 +18,8 @@ use crate::{
 
 use super::{BurnMessage, Ft2Sft, Ft2SftData, MintMessage};
 
+/// Reference implementation for
+/// [Fungible Tokens to Sharded Fungible Tokens adaptor](Ft2Sft)
 #[near(contract_state(key = Ft2SftData::STATE_KEY))]
 #[autoimpl(Deref using self.0)]
 #[autoimpl(DerefMut using self.0)]
@@ -51,7 +51,7 @@ impl ShardedFungibleTokenMinter for Ft2SftContract {
 
 #[near]
 impl FungibleTokenReceiver for Ft2SftContract {
-    // TODO: note: DO NOT TRUST FORWARDED sender_id
+    /// Mint (i.e. "wrap") received fungible tokens into sharded ones.
     fn ft_on_transfer(
         &mut self,
         sender_id: AccountId,
@@ -72,7 +72,7 @@ impl FungibleTokenReceiver for Ft2SftContract {
             .unwrap_or_else(|| env::panic_str(ERR_SUPPLY_OVERFLOW));
 
         let receiver_id = mint.receiver_id.as_deref().unwrap_or(&sender_id);
-        let sft_wallet_id = self.sft_wallet_account_id_for(&receiver_id);
+        let sft_wallet_id = self.sft_wallet_account_id_for(receiver_id);
 
         // We don't do `.with_state_init()`, since there is no way to attach
         // deposit to `.ft_on_transfer()` according to NEP-141 spec. So, if
@@ -100,7 +100,7 @@ impl FungibleTokenReceiver for Ft2SftContract {
             .sft_receive(
                 // Note: there is no guarantee that `sender_id` from
                 // `.ft_on_transfer()` indeed initiated the transfer.
-                sender_id.into(),
+                sender_id,
                 amount,
                 mint.memo,
                 mint.notify,
@@ -119,8 +119,9 @@ impl FungibleTokenReceiver for Ft2SftContract {
 
 #[near]
 impl ShardedFungibleTokenBurner for Ft2SftContract {
+    /// Burn sharded fungible tokens and unwrap into non-sharded ones.
     #[payable]
-    fn sft_on_burn<'nearinput>(
+    fn sft_on_burn(
         &mut self,
         sender_id: AccountId,
         amount: U128,
@@ -128,7 +129,7 @@ impl ShardedFungibleTokenBurner for Ft2SftContract {
     ) -> PromiseOrValue<U128> {
         let mut deposit_left = env::attached_deposit()
             .checked_sub(NearToken::from_yoctonear(1))
-            .unwrap_or_else(|| env::panic_str(ERR_INSUFFICIENT_ATTACHED_DEPOSIT));
+            .unwrap_or_else(|| env::panic_str(ERR_INSUFFICIENT_DEPOSIT));
 
         require!(
             env::predecessor_account_id()
@@ -154,7 +155,7 @@ impl ShardedFungibleTokenBurner for Ft2SftContract {
         if !burn.storage_deposit.is_zero() {
             deposit_left = deposit_left
                 .checked_sub(burn.storage_deposit)
-                .unwrap_or_else(|| env::panic_str(ERR_INSUFFICIENT_ATTACHED_DEPOSIT));
+                .unwrap_or_else(|| env::panic_str(ERR_INSUFFICIENT_DEPOSIT));
 
             p = ext_storage_management::ext_on(p)
                 .with_attached_deposit(burn.storage_deposit)
@@ -212,7 +213,8 @@ impl Ft2SftContract {
     pub fn resolve_transfer(&mut self, op: Op, amount: U128) -> U128 {
         let used_amount = op
             .extract_used_amount(env::promise_result_at_most(0, Self::MAX_RESULT_LENGTH), amount.0);
-        let unused_amount = amount.0.saturating_sub(used_amount); // TODO: .min(self.total_supply); and no panic?
+
+        let unused_amount = amount.0.saturating_sub(used_amount);
 
         match op {
             Op::SftReceive => {
@@ -295,4 +297,4 @@ const ERR_WRONG_TOKEN: &str = "wrong token";
 const ERR_WRONG_WALLET: &str = "wrong wallet";
 const ERR_SUPPLY_OVERFLOW: &str = "total_supply overflow";
 const ERR_INVALID_JSON: &str = "invalid JSON";
-const ERR_INSUFFICIENT_ATTACHED_DEPOSIT: &str = "insufficient attached deposit";
+const ERR_INSUFFICIENT_DEPOSIT: &str = "insufficient attached deposit";

@@ -220,7 +220,6 @@ pub fn near(attr: TokenStream, item: TokenStream) -> TokenStream {
 struct NearBindgenMacroArgs {
     contract_state: Option<core_impl::state::ContractState>,
     #[darling(default)]
-    // TODO: real default?
     contract_metadata: core_impl::ContractMetadata,
 }
 

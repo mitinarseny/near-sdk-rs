@@ -174,8 +174,8 @@ pub fn current_account_id() -> AccountId {
 /// For now, only references to globally deployed contracts are supported.
 ///
 /// Note: gas cost of this for globally deployed contracts should be
-/// relatively small, since it would only return `GlobalContractCodeId::CodeHash(code_hash)`
-/// or `GlobalContractCodeId::AccountId(account_id)`.
+/// relatively small, since it would only return `ContractCode::GlobalCodeHash(code_hash)`
+/// or `ContractCode::GlobalAccountId(account_id)`.
 pub fn current_contract_code() -> ContractCode {
     match unsafe { sys::current_contract_code(ATOMIC_OP_REGISTER) } {
         0 => {

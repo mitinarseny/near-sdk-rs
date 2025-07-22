@@ -8,20 +8,19 @@ use borsh::{io, BorshDeserialize, BorshSerialize};
 use near_account_id::AccountId;
 use near_sdk_macros::near;
 use near_token::NearToken;
+use serde_with::base64::Base64;
 
 use crate::{env, CryptoHash, StorageUsage};
 
-/// Initialization state for non-existing contract
+/// Initialization state for non-existing contract with deterministic
+/// account id, according to NEP-616.
 #[near(inside_nearsdk, serializers=[borsh, json])]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateInit {
     /// Code to deploy
     pub code: ContractCode,
     /// Optional key/value pairs to populate to storage on first initialization
-    // TODO: serde
     pub data: ContractStorage,
-    // TODO: serde vec?
-    // pub data: Option<Cow<'a, [u8]>>,
 }
 
 impl StateInit {
@@ -39,44 +38,19 @@ impl StateInit {
     }
 
     /// Derives [`AccountId`] deterministically, according to NEP-616.
-    ///
-    /// We reuse existing implicit eth addresses and add custom prefix to
-    /// second prehash to ensure we avoid collisions between secp256k1
-    /// public keys and [`StateInit`] borsh representation.
-    /// So, the final schema looks like:  
-    /// `"0x" .. hex(keccak256("state_init" .. keccak256(state_init))[12..32])`
-    // TODO: or separate account-id scheme?
-    // TODO: this can be cheaper for transfers, since transfers to implicit eth
-    // cost more and there is no way to tell the difference based on account_id
+    /// See [`LazyStateInit::derive_account_id`].
     #[inline]
     pub fn derive_account_id(&self) -> AccountId {
         self.lazy_serialized().derive_account_id()
     }
 
-    #[inline]
-    pub const fn lazy(self) -> LazyStateInit {
-        LazyStateInit(LazyStateInitInner::StateInit(self))
-    }
-
-    pub fn lazy_serialized(&self) -> LazyStateInit {
-        LazyStateInit(LazyStateInitInner::Serialized(
-            borsh::to_vec(self).unwrap_or_else(|_| unreachable!()),
-        ))
-    }
-
-    // TODO
-    // /// Set data to given `value` serialized to [`borsh`]
-    // #[inline]
-    // pub fn with_data_entry_borsh<V>(self, key: K, value: V) -> Self
-    // where
-    //     V: BorshSerialize,
-    // {
-    //     self.with_data_entry(
-    //         value.map(|v| borsh::to_vec(&v).unwrap_or_else(|_| unreachable!())).map(Cow::Owned),
-    //     )
-    // }
-
-    /// TODO: docs
+    /// Estimate amount of NEAR required to cover the storage costs for
+    /// deploying and initializing the contract.
+    ///
+    /// Note that this estimation is based on current runtime storage config,
+    /// so if these values change while in-flight, then the estimated amount
+    /// can be insufficient to cover for updated protocol config values.
+    /// In this case, one can just retry the operation and it would succeed.
     #[inline]
     pub fn storage_cost(&self) -> NearToken {
         self.storage_usage()
@@ -93,6 +67,17 @@ impl StateInit {
             // https://github.com/near/nearcore/blob/685f92e3b9efafc966c9dafcb7815f172d4bb557/runtime/runtime/src/actions.rs#L468
             .checked_add(env::storage_num_bytes_account())
     }
+
+    #[inline]
+    pub const fn lazy(self) -> LazyStateInit {
+        LazyStateInit(LazyStateInitInner::StateInit(self))
+    }
+
+    pub fn lazy_serialized(&self) -> LazyStateInit {
+        LazyStateInit(LazyStateInitInner::Serialized(
+            borsh::to_vec(self).unwrap_or_else(|_| unreachable!()),
+        ))
+    }
 }
 
 /// Code to deploy for non-existing contract
@@ -101,8 +86,7 @@ impl StateInit {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ContractCode {
     /// Reference global contract's code by its hash
-    // TODO: serde serialization?
-    CodeHash(CryptoHash),
+    CodeHash(#[serde_as(as = "Base64")] CryptoHash),
 
     /// Reference global contract's code by its [`AccountId`]
     AccountId(AccountId),
@@ -135,12 +119,13 @@ impl From<AccountId> for ContractCode {
     }
 }
 
+/// Key-value storage of a contract
 #[near(inside_nearsdk, serializers=[borsh, json])]
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 #[repr(transparent)]
-// TODO: Cow<'a, [u8]>?
-// TODO: serde
-pub struct ContractStorage(pub BTreeMap<Vec<u8>, Vec<u8>>);
+pub struct ContractStorage(
+    #[serde_as(as = "BTreeMap<Base64, Base64>")] pub BTreeMap<Vec<u8>, Vec<u8>>,
+);
 
 impl ContractStorage {
     #[inline]
@@ -187,37 +172,38 @@ impl DerefMut for ContractStorage {
     }
 }
 
+/// Maybe serialized [`StateInit`]
 #[near(inside_nearsdk, serializers=[borsh, json])]
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct LazyStateInit(LazyStateInitInner);
-
-impl From<StateInit> for LazyStateInit {
-    fn from(state_init: StateInit) -> Self {
-        state_init.lazy()
-    }
-}
 
 #[near(inside_nearsdk, serializers=[json])]
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 enum LazyStateInitInner {
     StateInit(StateInit),
-    // TODO: serde vec
-    Serialized(Vec<u8>),
+    Serialized(#[serde_as(as = "Base64")] Vec<u8>),
 }
 
 impl LazyStateInit {
-    /// See [`StateInit::derive_account_id()`]
+    /// Derives [`AccountId`] deterministically, according to NEP-616.
+    ///
+    /// The schema looks like: `"0s" .. hex(keccak256(state_init)[12..32])`.
+    ///
+    /// Such schema is backwards-compatible with existing [`AccountId`] types.
+    /// It looks similar to existing implicit Eth addresses but we
+    /// intentionally use a different prefix, so it's possible to distinguish
+    /// between different kinds of accounts in runtime and apply different
+    /// rules for estimating gas and storage costs.
     #[inline]
     pub fn derive_account_id(&self) -> AccountId {
-        let hash = env::keccak256_array(
-            &[b"state_init".as_slice(), &env::keccak256_array(&self.serialize())].concat(),
-        );
-
-        format!("0x{}", hex::encode(&hash[12..32])).parse().unwrap_or_else(|_| unreachable!())
+        format!("0s{}", hex::encode(&env::keccak256_array(&self.serialize())[12..32]))
+            .parse()
+            .unwrap_or_else(|_| unreachable!())
     }
 
+    #[inline]
     pub fn serialize(&self) -> Cow<'_, [u8]> {
         match &self.0 {
             LazyStateInitInner::StateInit(state_init) => {
@@ -228,11 +214,17 @@ impl LazyStateInit {
     }
 
     #[inline]
-    pub fn into_state_init(self) -> io::Result<StateInit> {
+    pub fn deserialize(self) -> io::Result<StateInit> {
         match self.0 {
             LazyStateInitInner::StateInit(state_init) => Ok(state_init),
             LazyStateInitInner::Serialized(data) => borsh::from_slice(&data),
         }
+    }
+}
+
+impl From<StateInit> for LazyStateInit {
+    fn from(state_init: StateInit) -> Self {
+        state_init.lazy()
     }
 }
 

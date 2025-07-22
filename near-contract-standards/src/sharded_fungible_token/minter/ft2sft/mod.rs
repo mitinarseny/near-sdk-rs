@@ -5,7 +5,7 @@ use std::borrow::Cow;
 
 use near_sdk::{
     ext_contract, near, serde_with::DisplayFromStr, AccountId, AccountIdRef, ContractCode,
-    NearToken,
+    ContractStorage, NearToken,
 };
 
 use crate::{
@@ -81,7 +81,7 @@ pub struct BurnMessage {
 }
 
 impl<'a> Ft2SftData<'a> {
-    pub const STATE_KEY: &'static [u8] = b"";
+    const STATE_KEY: &'static [u8] = b"";
 
     #[inline]
     pub fn init(
@@ -93,5 +93,13 @@ impl<'a> Ft2SftData<'a> {
             ft_contract_id: ft_contract_id.into(),
             sft_wallet_code: sft_wallet_code.into(),
         }
+    }
+
+    #[inline]
+    pub fn init_state(
+        ft_contract_id: impl Into<Cow<'a, AccountIdRef>>,
+        sft_wallet_code: impl Into<ContractCode>,
+    ) -> ContractStorage {
+        ContractStorage::new().borsh(&Self::STATE_KEY, &Self::init(ft_contract_id, sft_wallet_code))
     }
 }

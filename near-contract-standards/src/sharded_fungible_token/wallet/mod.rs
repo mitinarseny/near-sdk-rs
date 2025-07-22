@@ -59,7 +59,7 @@ pub trait ShardedFungibleTokenWallet {
     /// Returns `used_amount`.
     ///
     /// Note: must be #[payable]
-    fn sft_transfer<'nearinput>(
+    fn sft_transfer(
         &mut self,
         receiver_id: AccountId,
         amount: U128,
@@ -85,7 +85,7 @@ pub trait ShardedFungibleTokenWallet {
     /// Returns `used_amount`.
     ///
     /// Note: must be #[payable] and require at least 1yN attached.
-    fn sft_receive<'nearinput>(
+    fn sft_receive(
         &mut self,
         sender_id: AccountId,
         amount: U128,
@@ -108,7 +108,7 @@ pub trait ShardedFungibleTokenWallet {
     /// Returns `burned_amount`.
     ///
     /// Note: must be #[payable] and require at least 1yN attached
-    fn sft_burn<'nearinput>(&mut self, amount: U128, msg: String) -> PromiseOrValue<U128>;
+    fn sft_burn(&mut self, amount: U128, msg: String) -> PromiseOrValue<U128>;
 }
 
 /// Sharded Fungible Token wallet-contract data
@@ -167,7 +167,7 @@ pub struct TransferNotification {
 impl TransferNotification {
     #[inline]
     pub fn msg(msg: String) -> Self {
-        Self { state_init: None, msg: msg.into(), forward_deposit: NearToken::from_yoctonear(0) }
+        Self { state_init: None, msg, forward_deposit: NearToken::from_yoctonear(0) }
     }
 
     #[inline]

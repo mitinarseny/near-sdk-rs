@@ -15,7 +15,7 @@ pub trait ShardedFungibleTokenMinter {
 
     /// View-method to calculate [`AccountId`] of wallet-contract for given
     /// `owner_id`, primarily to be used off-chain.
-    fn sft_wallet_account_id<'nearinput>(&self, owner_id: AccountId) -> AccountId;
+    fn sft_wallet_account_id(&self, owner_id: AccountId) -> AccountId;
 }
 
 /// Optional "burner" trait for [minter-contract](ShardedFungibleTokenMinter).
@@ -27,7 +27,7 @@ pub trait ShardedFungibleTokenBurner: ShardedFungibleTokenMinter {
     /// will be minted back on `sender_id`.
     ///
     /// Note: must be `#[payable]` and require at least 1yN attached
-    fn sft_on_burn<'nearinput>(
+    fn sft_on_burn(
         &mut self,
         sender_id: AccountId,
         amount: U128,

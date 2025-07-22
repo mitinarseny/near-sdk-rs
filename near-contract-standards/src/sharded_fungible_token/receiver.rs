@@ -19,7 +19,7 @@ pub trait ShardedFungibleTokenReceiver {
     /// * Call view-method `predecessor_account_id::sft_wallet_data()` and
     ///   extract `data.minter_id`
     /// Note: implementations are recommended to be `#[payable]`.
-    fn sft_on_receive<'nearinput>(
+    fn sft_on_receive(
         &mut self,
         sender_id: AccountId,
         amount: U128,

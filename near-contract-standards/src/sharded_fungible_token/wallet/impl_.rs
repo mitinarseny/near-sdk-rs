@@ -93,8 +93,14 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
 
         let mut deposit_left = env::attached_deposit();
 
+        // refund to given account or caller if not specified
+        let refund_to = refund_to.unwrap_or(caller);
+
         // call receiver's wallet-contract
-        let mut p = Self::ext(state_init.derive_account_id());
+        let mut p = Promise::new(state_init.derive_account_id())
+            // refund state_init amount and attached deposit in case of failure
+            // to `refund_to` instead of sender's wallet-contract
+            .refund_to(refund_to.clone());
 
         if let Some(amount) = state_init_amount {
             // subtract the required amount for state_init from attached deposit
@@ -102,25 +108,19 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
                 deposit_left.checked_sub(amount).unwrap_or_else(|| env::panic_str(ERR_DEPOSIT));
 
             // deploy & init receiver's wallet-contract
-            p = p.with_state_init(state_init, amount);
+            p = p.state_init(state_init, amount);
         }
 
         // we still need at least 1yN to attach to `.sft_receive()`
         require!(deposit_left >= NearToken::from_yoctonear(1), ERR_DEPOSIT);
 
-        // refund to given account or caller if not specified
-        let refund_to = refund_to.unwrap_or(caller);
-
-        p
+        Self::ext_on(p)
             // forward remaining attached deposit
             .with_attached_deposit(deposit_left)
             // require minimum gas
             .with_static_gas(SFTWalletData::SFT_RECEIVE_MIN_GAS)
             // forward all remaining gas here
             .with_unused_gas_weight(1)
-            // refund state_init amount and attached deposit in case of failure
-            // to `refund_to` instead of sender's wallet-contract
-            .with_refund_to(refund_to.clone())
             .sft_receive(
                 self.owner_id.clone().into_owned(),
                 amount,
@@ -182,14 +182,21 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
             return PromiseOrValue::Value(amount);
         };
 
-        let mut p = ext_sft_receiver::ext(self.owner_id.clone().into_owned());
+        // refund to given account or `sender_id` if not specified
+        let refund_to = refund_to.unwrap_or_else(|| sender_id.clone());
+
+        // notify receiver
+        let mut p = Promise::new(self.owner_id.clone().into_owned())
+            // refund state_init amount and attached deposit in case of failure
+            // to `refund_to` instead of receiver's wallet-contract
+            .refund_to(refund_to.clone());
 
         if let Some(StateInitArgs { state_init, state_init_amount }) = notify.state_init {
             deposit_left = deposit_left
                 .checked_sub(state_init_amount)
                 .unwrap_or_else(|| env::panic_str(ERR_DEPOSIT));
 
-            p = p.with_state_init(state_init, state_init_amount);
+            p = p.state_init(state_init, state_init_amount);
         }
 
         // check that there was enough attached deposit
@@ -197,23 +204,17 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
             .checked_sub(notify.forward_deposit)
             .unwrap_or_else(|| env::panic_str(ERR_DEPOSIT));
 
-        // refund to given account or `sender_id` if not specified
-        let refund_to = refund_to.unwrap_or_else(|| sender_id.clone());
-
         // refund excess deposit (only if more than 1yN)
         if deposit_left > NearToken::from_yoctonear(1) {
             // detached
             let _ = Promise::new(refund_to.clone()).transfer(deposit_left);
         }
 
-        p
+        ext_sft_receiver::ext_on(p)
             // forward deposit
             .with_attached_deposit(notify.forward_deposit)
             // forward all remaining gas here
             .with_unused_gas_weight(1)
-            // refund state_init amount and attached deposit in case of failure
-            // to `refund_to` instead of receiver's wallet-contract
-            .with_refund_to(refund_to)
             .sft_on_receive(sender_id, amount, notify.msg)
             .then(
                 Self::ext(env::current_account_id())

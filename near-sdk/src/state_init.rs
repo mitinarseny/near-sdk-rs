@@ -60,7 +60,7 @@ impl StateInit {
 
     pub fn lazy_serialized(&self) -> LazyStateInit {
         LazyStateInit(LazyStateInitInner::Serialized(
-            borsh::to_vec(self).unwrap_or_else(|_| unreachable!()).into(),
+            borsh::to_vec(self).unwrap_or_else(|_| unreachable!()),
         ))
     }
 
@@ -181,7 +181,7 @@ impl Deref for ContractStorage {
     }
 }
 
-impl<'a> DerefMut for ContractStorage {
+impl DerefMut for ContractStorage {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -192,7 +192,7 @@ impl<'a> DerefMut for ContractStorage {
 #[repr(transparent)]
 pub struct LazyStateInit(LazyStateInitInner);
 
-impl<'a> From<StateInit> for LazyStateInit {
+impl From<StateInit> for LazyStateInit {
     fn from(state_init: StateInit) -> Self {
         state_init.lazy()
     }
@@ -223,7 +223,7 @@ impl LazyStateInit {
             LazyStateInitInner::StateInit(state_init) => {
                 Cow::Owned(borsh::to_vec(state_init).unwrap_or_else(|_| unreachable!()))
             }
-            LazyStateInitInner::Serialized(data) => Cow::Borrowed(&data),
+            LazyStateInitInner::Serialized(data) => Cow::Borrowed(data),
         }
     }
 
@@ -240,7 +240,7 @@ impl BorshSerialize for LazyStateInitInner {
     fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
         match self {
             Self::StateInit(state_init) => BorshSerialize::serialize(state_init, writer),
-            Self::Serialized(data) => writer.write_all(&data),
+            Self::Serialized(data) => writer.write_all(data),
         }
     }
 }

@@ -207,5 +207,5 @@ pub trait ShardedFungibleTokenWalletGoverned: ShardedFungibleTokenWallet {
     /// Set status (only allowed for minter).
     ///
     /// Note: MUST have exactly 1yN attached.
-    fn sft_wallet_set_status(&mut self, status: u8);
+    fn sft_set_status(&mut self, status: u8);
 }

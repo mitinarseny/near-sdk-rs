@@ -247,10 +247,13 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
 
         let caller = env::predecessor_account_id();
 
-        #[cfg(feature = "sft-wallet-governed-impl")]
-        require!(caller == *self.owner_id || caller == *self.minter_id, Self::ERR_NOT_OWNER);
         #[cfg(not(feature = "sft-wallet-governed-impl"))]
         require!(caller == *self.owner_id, Self::ERR_NOT_OWNER);
+        #[cfg(feature = "sft-wallet-governed-impl")]
+        if caller != *self.minter_id {
+            require!(caller == *self.owner_id, Self::ERR_NOT_OWNER);
+            require!(!self.is_outgoing_transfers_locked(), Self::ERR_LOCKED);
+        }
 
         self.balance = self
             .balance
@@ -350,7 +353,7 @@ const _: () = {
         ///
         /// Note: MUST have exactly 1yN attached.
         #[payable]
-        fn sft_wallet_set_status(&mut self, status: u8) {
+        fn sft_set_status(&mut self, status: u8) {
             require!(
                 env::attached_deposit() == NearToken::from_yoctonear(1),
                 Self::ERR_INSUFFICIENT_DEPOSIT

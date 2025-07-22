@@ -167,25 +167,30 @@ impl ShardedFungibleTokenBurner for Ft2SftContract {
         }
 
         let op: Op;
-
         let ft_ext = ext_ft_core::ext_on(p)
+            // both `.ft_transfer()` and `.ft_transfer_call()` require 1yN
             .with_attached_deposit(NearToken::from_yoctonear(1))
             // forward here all remaining gas
             .with_unused_gas_weight(1);
-        if let Some(msg) = burn.msg {
-            op = Op::FtTransferCall;
-            ft_ext
-                // require minimum gas
-                .with_static_gas(Self::FT_TRANSFER_CALL_MIN_GAS)
-                .ft_transfer_call(receiver_id, amount, burn.memo, msg)
+        (op, p) = if let Some(msg) = burn.msg {
+            (
+                Op::FtTransferCall,
+                ft_ext
+                    // require minimum gas
+                    .with_static_gas(Self::FT_TRANSFER_CALL_MIN_GAS)
+                    .ft_transfer_call(receiver_id, amount, burn.memo, msg),
+            )
         } else {
-            op = Op::FtTransfer;
-            ft_ext
-                // require minimum gas
-                .with_static_gas(Self::FT_TRANSFER_MIN_GAS)
-                .ft_transfer(receiver_id, amount, burn.memo)
-        }
-        .then(
+            (
+                Op::FtTransfer,
+                ft_ext
+                    // require minimum gas
+                    .with_static_gas(Self::FT_TRANSFER_MIN_GAS)
+                    .ft_transfer(receiver_id, amount, burn.memo),
+            )
+        };
+
+        p.then(
             Self::ext(env::current_account_id())
                 .with_static_gas(Self::RESOLVE_TRANSFER_GAS)
                 // do not distribute remaining gas here

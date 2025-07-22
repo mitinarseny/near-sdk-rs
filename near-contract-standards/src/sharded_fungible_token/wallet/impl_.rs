@@ -68,10 +68,9 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
         #[cfg(not(feature = "sft-wallet-governed-impl"))]
         require!(caller == *self.owner_id, Self::ERR_NOT_OWNER);
         #[cfg(feature = "sft-wallet-governed-impl")]
-        {
-            let is_from_minter = caller == *self.minter_id;
-            require!(is_from_minter || caller == *self.owner_id, Self::ERR_NOT_OWNER);
-            require!(is_from_minter || !self.is_outgoing_transfers_locked(), Self::ERR_LOCKED);
+        if caller != *self.minter_id {
+            require!(caller == *self.owner_id, Self::ERR_NOT_OWNER);
+            require!(!self.is_outgoing_transfers_locked(), Self::ERR_LOCKED);
         }
 
         require!(receiver_id != *self.owner_id, Self::ERR_SELF_TRANSFER);
@@ -343,14 +342,15 @@ impl SFTWalletContract {
 
 #[cfg(feature = "sft-wallet-governed-impl")]
 const _: () = {
+    use super::ShardedFungibleTokenWalletGoverned;
+
     #[near]
-    impl SFTWalletContract {
+    impl ShardedFungibleTokenWalletGoverned for SFTWalletContract {
         /// Set status (only allowed for minter).
         ///
         /// Note: MUST have exactly 1yN attached.
-        #[allow(dead_code)]
         #[payable]
-        pub fn sft_set_status(&mut self, status: u8) {
+        fn sft_wallet_set_status(&mut self, status: u8) {
             require!(
                 env::attached_deposit() == NearToken::from_yoctonear(1),
                 Self::ERR_INSUFFICIENT_DEPOSIT

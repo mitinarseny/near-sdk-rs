@@ -193,3 +193,19 @@ pub struct StateInitArgs {
     #[serde(default, skip_serializing_if = "NearToken::is_zero")]
     pub state_init_amount: NearToken,
 }
+
+/// # Governed Sharded Fungible Token wallet-contract
+///
+/// Same as [ShardedFungibleTokenWallet], but
+/// [minter-contract](super::minter::ShardedFungibleTokenMinter) is also
+/// allowed to:
+/// * forcily transfer by calling [`.sft_transfer()`](ShardedFungibleTokenWallet::sft_transfer)
+/// * lock outgoing transfers
+/// * lock incoming transfers
+#[ext_contract(ext_sft_wallet_governed)]
+pub trait ShardedFungibleTokenWalletGoverned: ShardedFungibleTokenWallet {
+    /// Set status (only allowed for minter).
+    ///
+    /// Note: MUST have exactly 1yN attached.
+    fn sft_wallet_set_status(&mut self, status: u8);
+}

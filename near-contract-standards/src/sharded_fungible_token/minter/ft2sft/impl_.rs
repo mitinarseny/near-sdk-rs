@@ -78,7 +78,7 @@ impl FungibleTokenReceiver for Ft2SftContract {
         // deposit to `.ft_on_transfer()` according to NEP-141 spec. So, if
         // the wallet-contract turns out to *not* exist, we will refund NEP-141
         // tokens to sender in `.resolve_transfer()`. Thus, if sender wants to
-        // ensure succesful wrapping, he needs to create receiver's
+        // ensure successful wrapping, he needs to create receiver's
         // wallet-contract by himself in advance.
         //
         // It doesn't make sense to expose additional function for creation of

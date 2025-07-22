@@ -78,7 +78,7 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
 
         // We do not require `amount > 0`, since it can be used to just pay for
         // receiver's wallet-contract creation. Optionally, the receiver
-        // contract can be notified about it, so he can rely on its existense.
+        // contract can be notified about it, so he can rely on its existence.
 
         self.balance = self
             .balance

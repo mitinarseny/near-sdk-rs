@@ -44,7 +44,7 @@ impl ShardedFungibleTokenMinter for Ft2SftContract {
         self.0.sft_wallet_code
     }
 
-    fn sft_wallet_account_id<'nearinput>(&self, owner_id: AccountId) -> AccountId {
+    fn sft_wallet_account_id(&self, owner_id: AccountId) -> AccountId {
         self.sft_wallet_account_id_for(&owner_id)
     }
 }

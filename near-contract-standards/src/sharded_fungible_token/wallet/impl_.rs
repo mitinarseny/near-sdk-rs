@@ -345,6 +345,9 @@ impl SFTWalletContract {
 const _: () = {
     #[near]
     impl SFTWalletContract {
+        /// Set status (only allowed for minter).
+        ///
+        /// Note: MUST have exactly 1yN attached.
         #[allow(dead_code)]
         #[payable]
         pub fn sft_set_status(&mut self, status: u8) {

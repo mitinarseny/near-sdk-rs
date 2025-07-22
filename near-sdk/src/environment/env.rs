@@ -1250,7 +1250,7 @@ pub fn promise_batch_action_function_call_weight(
 /// * The contract is deployed and initialized with [`state_init`](crate::StateInit)
 /// * [`state_init.storage_cost`](crate::StateInit::storage_cost) is
 ///   subtracted from attached `amount`. If the contract was in `uninit`
-///   state and had non-zero balance, then its balace is used first and only
+///   state and had non-zero balance, then its balance is used first and only
 ///   the missing part required for covering storage costs will subtracted
 ///   from the attached `amount`.
 /// * The contract state is marked as `active`.

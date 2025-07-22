@@ -20,7 +20,7 @@ use crate::{
 ///
 /// It mints sharded fungible tokens on [`.ft_on_transfer()`](crate::fungible_token::receiver::FungibleTokenReceiver::ft_on_transfer)
 /// and burns them back in [`.sft_on_burn()`](crate::sharded_fungible_token::minter::ShardedFungibleTokenBurner::sft_on_burn).
-#[ext_contract(ext_ft2ft)]
+#[ext_contract(ext_ft2sft)]
 pub trait Ft2Sft:
     ShardedFungibleTokenMinter + ShardedFungibleTokenBurner + FungibleTokenReceiver
 {

@@ -2,13 +2,19 @@ use std::collections::BTreeMap;
 
 use near_sdk::{near, serde::Serialize, serde_json, ContractCode};
 
+/// ABI helper for contracts to expose common getter interfaces, while
+/// providing an option to extend with custom fields.
 #[near(serializers=[json])]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContractState<T> {
+    /// Code this contract is deployed with
     pub code: ContractCode,
+    /// State of the contract
     pub state: ExtraState<T>,
 }
 
+/// ABI helper for contracts to expose common getter interfaces, while
+/// providing an option to extend with custom fields.
 #[near(serializers=[json])]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtraState<T> {
@@ -21,11 +27,13 @@ pub struct ExtraState<T> {
 }
 
 impl<T> ExtraState<T> {
+    #[inline]
     pub const fn new(value: T) -> Self {
         Self { value, extra: BTreeMap::new() }
     }
 
-    pub fn with<V>(mut self, key: impl Into<String>, value: V) -> Self
+    #[inline]
+    pub fn extra<V>(mut self, key: impl Into<String>, value: V) -> Self
     where
         V: Serialize,
     {
@@ -36,6 +44,7 @@ impl<T> ExtraState<T> {
 }
 
 impl<T> From<T> for ExtraState<T> {
+    #[inline]
     fn from(value: T) -> Self {
         Self { value, extra: BTreeMap::new() }
     }

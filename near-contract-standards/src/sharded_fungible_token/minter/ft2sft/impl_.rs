@@ -36,7 +36,7 @@ impl ShardedFungibleTokenMinter for Ft2SftContract {
         ContractState {
             code: env::current_contract_code(),
             state: ExtraState::new(self.0.data)
-                .with("ft_contract_id", self.0.ft_contract_id.as_ref()),
+                .extra("ft_contract_id", self.0.ft_contract_id.as_ref()),
         }
     }
 

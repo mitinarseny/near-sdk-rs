@@ -102,6 +102,6 @@ impl<'a> Ft2SftData<'a> {
         ft_contract_id: impl Into<Cow<'a, AccountIdRef>>,
         sft_wallet_code: impl Into<ContractCode>,
     ) -> ContractStorage {
-        ContractStorage::new().borsh(&Self::STATE_KEY, &Self::init(ft_contract_id, sft_wallet_code))
+        ContractStorage::new().borsh(Self::STATE_KEY, Self::init(ft_contract_id, sft_wallet_code))
     }
 }

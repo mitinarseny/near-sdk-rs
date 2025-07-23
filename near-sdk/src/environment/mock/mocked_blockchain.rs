@@ -207,12 +207,18 @@ mod mock_chain {
         with_mock_interface(|b| b.register_len(register_id))
     }
     #[no_mangle]
+    extern "C-unwind" fn write_register(register_id: u64, data_len: u64, data_ptr: u64) {
+        with_mock_interface(|b| b.write_register(register_id, data_len, data_ptr))
+    }
+    #[no_mangle]
     extern "C-unwind" fn current_account_id(register_id: u64) {
         with_mock_interface(|b| b.current_account_id(register_id))
     }
     #[no_mangle]
-    extern "C-unwind" fn current_contract_code(_register_id: u64) -> u8 {
-        unimplemented!("TBD")
+    extern "C-unwind" fn current_contract_code(register_id: u64) -> u8 {
+        // TODO: actual implementation
+        current_account_id(register_id);
+        1
     }
     #[no_mangle]
     extern "C-unwind" fn signer_account_id(register_id: u64) {
@@ -414,7 +420,7 @@ mod mock_chain {
         _account_id_len: u64,
         _account_id_ptr: u64,
     ) {
-        unimplemented!("TBD")
+        // TODO: actual implementation
     }
     #[no_mangle]
     extern "C-unwind" fn promise_batch_action_create_account(promise_index: u64) {
@@ -437,7 +443,7 @@ mod mock_chain {
         _state_init_ptr: u64,
         _amount_ptr: u64,
     ) {
-        unimplemented!("TBD")
+        // TODO: actual implementation
     }
     #[no_mangle]
     extern "C-unwind" fn promise_batch_action_function_call(
@@ -606,8 +612,14 @@ mod mock_chain {
         with_mock_interface(|b| b.promise_results_count())
     }
     #[no_mangle]
-    extern "C-unwind" fn promise_result_length(_result_idx: u64, _register_id: u64) -> u64 {
-        unimplemented!("TBD")
+    extern "C-unwind" fn promise_result_length(result_idx: u64, register_id: u64) -> u64 {
+        // TODO: actual implementation
+        let res = promise_result(result_idx, register_id);
+        if res == 1 {
+            let length = register_len(register_id).to_le_bytes();
+            write_register(register_id, length.len() as _, length.as_ptr() as _);
+        }
+        res
     }
     #[no_mangle]
     extern "C-unwind" fn promise_result(result_idx: u64, register_id: u64) -> u64 {
@@ -618,16 +630,21 @@ mod mock_chain {
         with_mock_interface(|b| b.promise_return(promise_id))
     }
     #[no_mangle]
-    extern "C-unwind" fn storage_config_amount_per_byte(_amount_ptr: u64) {
-        unimplemented!("TBD")
+    extern "C-unwind" fn storage_config_amount_per_byte(amount_ptr: u64) {
+        // TODO: actual implementation
+        unsafe {
+            (amount_ptr as *mut u128).write(10_000_000_000_000_000_000u128);
+        }
     }
     #[no_mangle]
     extern "C-unwind" fn storage_config_num_bytes_account() -> u64 {
-        unimplemented!("TBD")
+        // TODO: actual implementation
+        100
     }
     #[no_mangle]
     extern "C-unwind" fn storage_config_num_extra_bytes_record() -> u64 {
-        unimplemented!("TBD")
+        // TODO: actual implementation
+        40
     }
     #[no_mangle]
     extern "C-unwind" fn storage_write(

@@ -143,7 +143,7 @@ impl<'a> SFTWalletData<'a> {
         owner_id: impl Into<Cow<'a, AccountIdRef>>,
         minter_id: impl Into<Cow<'a, AccountIdRef>>,
     ) -> ContractStorage {
-        ContractStorage::new().borsh(&Self::STATE_KEY, &Self::init(owner_id, minter_id))
+        ContractStorage::new().borsh(Self::STATE_KEY, Self::init(owner_id, minter_id))
     }
 }
 
@@ -207,5 +207,24 @@ pub trait ShardedFungibleTokenWalletGoverned: ShardedFungibleTokenWallet {
     /// Set status (only allowed for minter).
     ///
     /// Note: MUST have exactly 1yN attached.
-    fn sft_set_status(&mut self, status: u8);
+    fn sft_wallet_set_status(&mut self, status: u8);
+}
+
+#[cfg(test)]
+mod tests {
+    use near_sdk::{ContractCode, StateInit};
+
+    use super::*;
+
+    #[test]
+    fn storage_cost() {
+        let long_account_id: AccountId = "a".repeat(64).parse().unwrap();
+
+        let code = ContractCode::GlobalAccountId("wallet.sft.near".parse().unwrap());
+        let data = SFTWalletData::init_state(&long_account_id, &long_account_id);
+
+        let state_init = StateInit::code(code).data(data);
+
+        println!("max storage cost: {}", state_init.storage_cost());
+    }
 }

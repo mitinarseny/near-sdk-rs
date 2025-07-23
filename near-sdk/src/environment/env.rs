@@ -1587,14 +1587,14 @@ pub fn promise_results_count() -> u64 {
 /// execution result via [`promise_result()`].
 pub(crate) fn promise_result_length(result_idx: u64) -> Result<u64, PromiseError> {
     match unsafe { sys::promise_result_length(result_idx, ATOMIC_OP_REGISTER) } {
-        0 => {
+        1 => {
             let buf = 0u64.to_le_bytes();
             unsafe {
                 sys::read_register(ATOMIC_OP_REGISTER, buf.as_ptr() as _);
             }
             Ok(u64::from_le_bytes(buf))
         }
-        1 => Err(PromiseError::Failed),
+        2 => Err(PromiseError::Failed),
         _ => abort(),
     }
 }

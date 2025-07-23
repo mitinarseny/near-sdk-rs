@@ -353,7 +353,7 @@ const _: () = {
         ///
         /// Note: MUST have exactly 1yN attached.
         #[payable]
-        fn sft_set_status(&mut self, status: u8) {
+        fn sft_wallet_set_status(&mut self, status: u8) {
             require!(
                 env::attached_deposit() == NearToken::from_yoctonear(1),
                 Self::ERR_INSUFFICIENT_DEPOSIT

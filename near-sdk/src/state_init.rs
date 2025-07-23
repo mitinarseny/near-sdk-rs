@@ -60,12 +60,11 @@ impl StateInit {
 
     /// See NEP-591: https://github.com/near/NEPs/blob/master/neps/nep-0591.md#costs
     pub(crate) fn storage_usage(&self) -> Option<StorageUsage> {
-        self.code
-            .storage_usage()
-            .checked_add(self.data.storage_usage()?)?
-            // `num_bytes_account` is required for every account on creation:
-            // https://github.com/near/nearcore/blob/685f92e3b9efafc966c9dafcb7815f172d4bb557/runtime/runtime/src/actions.rs#L468
-            .checked_add(env::storage_num_bytes_account())
+        // `num_bytes_account` is required for every account on creation:
+        // https://github.com/near/nearcore/blob/685f92e3b9efafc966c9dafcb7815f172d4bb557/runtime/runtime/src/actions.rs#L468
+        env::storage_num_bytes_account()
+            .checked_add(self.code.storage_usage())?
+            .checked_add(self.data.storage_usage()?)
     }
 
     #[inline]
@@ -133,14 +132,14 @@ impl ContractStorage {
         Self(BTreeMap::new())
     }
 
-    pub fn borsh<K, V>(mut self, key: &K, value: &V) -> Self
+    pub fn borsh<K, V>(mut self, key: K, value: V) -> Self
     where
         K: BorshSerialize,
         V: BorshSerialize,
     {
         self.0.insert(
-            borsh::to_vec(key).unwrap_or_else(|_| unreachable!()),
-            borsh::to_vec(value).unwrap_or_else(|_| unreachable!()),
+            borsh::to_vec(&key).unwrap_or_else(|_| unreachable!()),
+            borsh::to_vec(&value).unwrap_or_else(|_| unreachable!()),
         );
         self
     }
@@ -174,12 +173,12 @@ impl DerefMut for ContractStorage {
 
 /// Maybe serialized [`StateInit`]
 #[near(inside_nearsdk, serializers=[borsh, json])]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 #[repr(transparent)]
 pub struct LazyStateInit(LazyStateInitInner);
 
 #[near(inside_nearsdk, serializers=[json])]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 #[serde(untagged)]
 enum LazyStateInitInner {
     StateInit(StateInit),
@@ -228,6 +227,14 @@ impl From<StateInit> for LazyStateInit {
     }
 }
 
+impl PartialEq for LazyStateInit {
+    fn eq(&self, other: &Self) -> bool {
+        self.serialize() == other.serialize()
+    }
+}
+
+impl Eq for LazyStateInit {}
+
 impl BorshSerialize for LazyStateInitInner {
     fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
         match self {
@@ -260,3 +267,97 @@ const _: () = {
         }
     }
 };
+
+#[cfg(test)]
+mod tests {
+    use std::{fmt::Debug, sync::LazyLock};
+
+    use serde::{de::DeserializeOwned, Serialize};
+
+    use super::*;
+
+    static STATE_INIT: LazyLock<StateInit> = LazyLock::new(|| {
+        StateInit::code(ContractCode::GlobalAccountId("global.near".parse().unwrap()))
+            .data(ContractStorage::new().borsh("key", "value"))
+    });
+
+    #[test]
+    fn state_init_derive_account_id() {
+        let derived = STATE_INIT.derive_account_id();
+        println!("derived: {derived}");
+        assert!(derived.is_top_level());
+    }
+
+    #[test]
+    fn state_init_derive_account_id2() {
+        let derived1 = STATE_INIT.derive_account_id();
+
+        let mut state_init2 = STATE_INIT.clone();
+        state_init2.data = state_init2.data.borsh("key2", "value2");
+        let derived2 = state_init2.derive_account_id();
+
+        assert_ne!(derived1, derived2);
+    }
+
+    #[test]
+    fn state_init_storage_usage_and_cost() {
+        println!(
+            "storage usage: {} bytes, storage cost: {}",
+            STATE_INIT.storage_usage().unwrap(),
+            STATE_INIT.storage_cost()
+        );
+    }
+
+    #[test]
+    fn state_init_borsh_roundtrip() {
+        let deserialized = assert_borsh_roundtrip(&*STATE_INIT);
+
+        assert_eq!(STATE_INIT.derive_account_id(), deserialized.derive_account_id());
+    }
+
+    #[test]
+    fn state_init_json_roundtrip() {
+        let deserialized = assert_json_roundtrip(&*STATE_INIT);
+
+        assert_eq!(STATE_INIT.derive_account_id(), deserialized.derive_account_id());
+    }
+
+    #[test]
+    fn lazy_state_init_borsh_roundtrip() {
+        let state_init = STATE_INIT.lazy_serialized();
+        let deserialized = assert_borsh_roundtrip(&state_init);
+
+        assert_eq!(state_init.derive_account_id(), deserialized.derive_account_id());
+    }
+
+    #[test]
+    fn lazy_state_init_json_roundtrip() {
+        let state_init = STATE_INIT.lazy_serialized();
+        let deserialized = assert_json_roundtrip(&state_init);
+
+        assert_eq!(state_init.derive_account_id(), deserialized.derive_account_id());
+    }
+
+    #[track_caller]
+    fn assert_borsh_roundtrip<T>(value: &T) -> T
+    where
+        T: BorshSerialize + BorshDeserialize + PartialEq + Debug,
+    {
+        let serialized = borsh::to_vec(&value).expect("borsh serialize");
+        let deserialized: T = borsh::from_slice(&serialized).expect("borsh deserialize");
+        assert_eq!(deserialized, *value);
+        deserialized
+    }
+
+    #[track_caller]
+    fn assert_json_roundtrip<T>(value: &T) -> T
+    where
+        T: Serialize + DeserializeOwned + PartialEq + Debug,
+    {
+        let serialized = serde_json::to_string_pretty(&value).expect("JSON serialize");
+        println!("JSON: {serialized}");
+        let deserialized: T = serde_json::from_str(&serialized).expect("JSON deserialize");
+        assert_eq!(deserialized, *value);
+        deserialized
+    }
+}

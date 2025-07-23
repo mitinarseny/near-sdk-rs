@@ -1,16 +1,17 @@
-use impl_tools::autoimpl;
-use near_sdk::{
-    env, json_types::U128, near, require, serde_json, AccountId, AccountIdRef, NearToken,
-    PanicOnDefault, Promise, PromiseOrValue, StateInit,
-};
+#![allow(clippy::too_many_arguments)]
 
-use crate::{
+use impl_tools::autoimpl;
+use near_contract_standards::{
     contract_state::ContractState,
     sharded_fungible_token::{
         minter::ext_sft_burner,
         receiver::ext_sft_receiver,
         wallet::{SFTWalletData, ShardedFungibleTokenWallet, StateInitArgs, TransferNotification},
     },
+};
+use near_sdk::{
+    AccountId, AccountIdRef, NearToken, PanicOnDefault, Promise, PromiseOrValue, StateInit, env,
+    json_types::U128, near, require, serde_json,
 };
 
 /// # Reference implementation of Sharded Fungible Foken
@@ -65,9 +66,9 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
     ) -> PromiseOrValue<U128> {
         let caller = env::predecessor_account_id();
 
-        #[cfg(not(feature = "sft-wallet-governed-impl"))]
+        #[cfg(not(feature = "governed"))]
         require!(caller == *self.owner_id, Self::ERR_NOT_OWNER);
-        #[cfg(feature = "sft-wallet-governed-impl")]
+        #[cfg(feature = "governed")]
         if caller != *self.minter_id {
             require!(caller == *self.owner_id, Self::ERR_NOT_OWNER);
             require!(!self.is_outgoing_transfers_locked(), Self::ERR_LOCKED);
@@ -165,7 +166,7 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
             Self::ERR_WRONG_WALLET,
         );
 
-        #[cfg(feature = "sft-wallet-governed-impl")]
+        #[cfg(feature = "governed")]
         require!(!self.is_incoming_transfers_locked(), Self::ERR_LOCKED);
 
         self.balance = self
@@ -203,7 +204,7 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
         // refund excess deposit (only if more than 1yN)
         if deposit_left > NearToken::from_yoctonear(1) {
             // detached
-            let _ = Promise::new(refund_to.clone()).transfer(deposit_left);
+            let _ = Promise::new(refund_to).transfer(deposit_left);
         }
 
         ext_sft_receiver::ext_on(p)
@@ -247,9 +248,9 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
 
         let caller = env::predecessor_account_id();
 
-        #[cfg(not(feature = "sft-wallet-governed-impl"))]
+        #[cfg(not(feature = "governed"))]
         require!(caller == *self.owner_id, Self::ERR_NOT_OWNER);
-        #[cfg(feature = "sft-wallet-governed-impl")]
+        #[cfg(feature = "governed")]
         if caller != *self.minter_id {
             require!(caller == *self.owner_id, Self::ERR_NOT_OWNER);
             require!(!self.is_outgoing_transfers_locked(), Self::ERR_LOCKED);
@@ -279,6 +280,7 @@ impl ShardedFungibleTokenWallet for SFTWalletContract {
 
 #[near]
 impl SFTWalletContract {
+    #[allow(clippy::as_conversions)]
     const MAX_RESULT_LENGTH: u64 = "\"340282366920938463463374607431768211455\"".len() as _; // u128::MAX
 
     /// Gets result from `sft_receive()`, `sft_on_transfer()`
@@ -343,9 +345,9 @@ impl SFTWalletContract {
     }
 }
 
-#[cfg(feature = "sft-wallet-governed-impl")]
+#[cfg(feature = "governed")]
 const _: () = {
-    use super::ShardedFungibleTokenWalletGoverned;
+    use near_contract_standards::sharded_fungible_token::wallet::ShardedFungibleTokenWalletGoverned;
 
     #[near]
     impl ShardedFungibleTokenWalletGoverned for SFTWalletContract {
@@ -369,13 +371,13 @@ const _: () = {
         const OUTGOING_TRANSFERS_LOCKED_FLAG: u8 = 1 << 0;
         const INCOMING_TRANSFERS_LOCKED_FLAG: u8 = 1 << 1;
 
-        pub fn is_outgoing_transfers_locked(&self) -> bool {
-            self.status & Self::OUTGOING_TRANSFERS_LOCKED_FLAG
+        pub const fn is_outgoing_transfers_locked(&self) -> bool {
+            self.0.status & Self::OUTGOING_TRANSFERS_LOCKED_FLAG
                 == Self::OUTGOING_TRANSFERS_LOCKED_FLAG
         }
 
-        pub fn is_incoming_transfers_locked(&self) -> bool {
-            self.status & Self::INCOMING_TRANSFERS_LOCKED_FLAG
+        pub const fn is_incoming_transfers_locked(&self) -> bool {
+            self.0.status & Self::INCOMING_TRANSFERS_LOCKED_FLAG
                 == Self::INCOMING_TRANSFERS_LOCKED_FLAG
         }
     }
@@ -387,12 +389,14 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::as_conversions)]
     fn promise_result_ok() {
         let result = serde_json::to_string_pretty(&U128(u128::MAX)).unwrap();
         assert!(result.len() as u64 <= SFTWalletContract::MAX_RESULT_LENGTH);
     }
 
     #[test]
+    #[allow(clippy::as_conversions)]
     fn promise_result_too_long() {
         let result = serde_json::to_string_pretty(&"9".repeat(100)).unwrap();
         assert!(result.len() as u64 > SFTWalletContract::MAX_RESULT_LENGTH);

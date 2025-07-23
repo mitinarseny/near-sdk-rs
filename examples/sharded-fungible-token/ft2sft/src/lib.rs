@@ -1,22 +1,23 @@
 use impl_tools::autoimpl;
-use near_sdk::{
-    env::{self, TooLongError},
-    json_types::U128,
-    near, require, serde_json, AccountId, AccountIdRef, Gas, NearToken, PanicOnDefault, Promise,
-    PromiseError, PromiseOrValue, StateInit,
-};
-
-use crate::{
+use near_contract_standards::{
     contract_state::{ContractState, ExtraState},
     fungible_token::{core::ext_ft_core, receiver::FungibleTokenReceiver},
     sharded_fungible_token::{
-        minter::{SftMinterData, ShardedFungibleTokenBurner, ShardedFungibleTokenMinter},
-        wallet::{ext_sft_wallet, SFTWalletData},
+        minter::{
+            SftMinterData, ShardedFungibleTokenBurner, ShardedFungibleTokenMinter,
+            ft2sft::{BurnMessage, Ft2Sft, Ft2SftData, MintMessage},
+        },
+        wallet::{SFTWalletData, ext_sft_wallet},
     },
     storage_management::ext_storage_management,
 };
-
-use super::{BurnMessage, Ft2Sft, Ft2SftData, MintMessage};
+use near_sdk::{
+    AccountId, AccountIdRef, Gas, NearToken, PanicOnDefault, Promise, PromiseError, PromiseOrValue,
+    StateInit,
+    env::{self, TooLongError},
+    json_types::U128,
+    near, require, serde_json,
+};
 
 /// Reference implementation for
 /// [Fungible Tokens to Sharded Fungible Tokens adaptor](Ft2Sft)
@@ -57,7 +58,7 @@ impl FungibleTokenReceiver for Ft2SftContract {
         require!(env::predecessor_account_id() == *self.ft_contract_id, ERR_WRONG_TOKEN);
 
         let mint: MintMessage = if msg.is_empty() {
-            Default::default()
+            MintMessage::default()
         } else {
             serde_json::from_str(&msg).unwrap_or_else(|_| env::panic_str(ERR_INVALID_JSON))
         };
@@ -134,7 +135,7 @@ impl ShardedFungibleTokenBurner for Ft2SftContract {
         );
 
         let burn: BurnMessage = if msg.is_empty() {
-            Default::default()
+            BurnMessage::default()
         } else {
             serde_json::from_str(&msg).unwrap_or_else(|_| env::panic_str(ERR_INVALID_JSON))
         };
@@ -144,7 +145,7 @@ impl ShardedFungibleTokenBurner for Ft2SftContract {
             .checked_sub(amount.0)
             .unwrap_or_else(|| env::panic_str(ERR_SUPPLY_OVERFLOW));
 
-        let receiver_id = burn.receiver_id.unwrap_or(sender_id.clone());
+        let receiver_id = burn.receiver_id.unwrap_or_else(|| sender_id.clone());
 
         let mut p = Promise::new(self.ft_contract_id.clone().into_owned());
 
@@ -158,7 +159,7 @@ impl ShardedFungibleTokenBurner for Ft2SftContract {
                 .with_static_gas(Self::STORAGE_DEPOSIT_GAS)
                 // do not distribute remaining gas here
                 .with_unused_gas_weight(0)
-                .storage_deposit(Some(receiver_id.clone()), None)
+                .storage_deposit(Some(receiver_id.clone()), None);
         }
 
         if !deposit_left.is_zero() {
@@ -208,6 +209,7 @@ impl Ft2SftContract {
     const FT_TRANSFER_CALL_MIN_GAS: Gas = Gas::from_tgas(30);
     const RESOLVE_TRANSFER_GAS: Gas = Gas::from_tgas(5);
 
+    #[allow(clippy::as_conversions)]
     const MAX_RESULT_LENGTH: u64 = "\"340282366920938463463374607431768211455\"".len() as _; // u128::MAX
 
     #[allow(dead_code)]
@@ -265,31 +267,27 @@ enum Op {
 
 impl Op {
     fn extract_used_amount(
-        &self,
+        self,
         result: Result<Result<Vec<u8>, TooLongError>, PromiseError>,
         sent: u128,
     ) -> u128 {
         match result {
             Ok(Ok(data)) => match self {
-                Op::SftReceive | Op::FtTransferCall => {
+                Self::SftReceive | Self::FtTransferCall => {
                     // both `sft_receive` and `ft_transfer_call` return used amount
                     serde_json::from_slice::<U128>(&data).unwrap_or_default().0.min(sent)
                 }
-                Op::FtTransfer => {
+                Self::FtTransfer => {
                     // `ft_transfer` returns empty result on success
-                    if data.is_empty() {
-                        sent
-                    } else {
-                        0
-                    }
+                    if data.is_empty() { sent } else { 0 }
                 }
             },
             _ => match self {
-                Op::SftReceive | Op::FtTransfer => 0,
+                Self::SftReceive | Self::FtTransfer => 0,
                 // do not refund on failed `ft_transfer_call` due to
                 // NEP-141 vulnerability: `ft_resolve_transfer` fails to
                 // read result of `ft_on_transfer` due to insufficient gas
-                Op::FtTransferCall => sent,
+                Self::FtTransferCall => sent,
             },
         }
     }

@@ -1,9 +1,8 @@
-#[cfg(feature = "ft2sft-impl")]
-mod impl_;
+use std::{
+    borrow::Cow,
+    ops::{Deref, DerefMut},
+};
 
-use std::borrow::Cow;
-
-use impl_tools::autoimpl;
 use near_sdk::{
     ext_contract, near, AccountId, AccountIdRef, ContractCode, ContractStorage, NearToken,
 };
@@ -27,8 +26,6 @@ pub trait Ft2Sft:
 }
 
 #[near(serializers = [borsh, json])]
-#[autoimpl(Deref using self.data)]
-#[autoimpl(DerefMut using self.data)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ft2SftData<'a> {
     #[serde(flatten)]
@@ -87,7 +84,7 @@ pub struct BurnMessage {
 }
 
 impl<'a> Ft2SftData<'a> {
-    const STATE_KEY: &'static [u8] = b"";
+    pub const STATE_KEY: &'static [u8] = b"";
 
     #[inline]
     pub fn init(
@@ -103,5 +100,19 @@ impl<'a> Ft2SftData<'a> {
         sft_wallet_code: impl Into<ContractCode>,
     ) -> ContractStorage {
         ContractStorage::new().borsh(Self::STATE_KEY, Self::init(ft_contract_id, sft_wallet_code))
+    }
+}
+
+impl Deref for Ft2SftData<'_> {
+    type Target = SftMinterData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl DerefMut for Ft2SftData<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
     }
 }

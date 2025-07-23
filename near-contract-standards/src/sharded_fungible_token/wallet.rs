@@ -1,8 +1,5 @@
 #![allow(clippy::too_many_arguments)]
 
-#[cfg(feature = "sft-wallet-impl")]
-mod impl_;
-
 use std::borrow::Cow;
 
 use near_sdk::{
@@ -125,7 +122,7 @@ pub struct SFTWalletData<'a> {
 }
 
 impl<'a> SFTWalletData<'a> {
-    const STATE_KEY: &'static [u8] = b"";
+    pub const STATE_KEY: &'static [u8] = b"";
     // TODO: calculate exact values
     pub const SFT_RECEIVE_MIN_GAS: Gas = Gas::from_tgas(5);
     pub const SFT_RESOLVE_GAS: Gas = Gas::from_tgas(5);

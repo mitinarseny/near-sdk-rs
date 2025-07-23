@@ -19,7 +19,6 @@ crate-type = ["cdylib", "rlib"]
 near-sdk = { path = "../near-sdk", version = "~5.15.1", default-features = false, features = [
     "legacy",
 ] }
-impl-tools = "0.11"
 
 [dev-dependencies]
 near-sdk = { path = "../near-sdk", default-features = false, features = [

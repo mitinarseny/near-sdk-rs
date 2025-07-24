@@ -2,7 +2,7 @@
 //!
 //! The design is highly inspired by [Jetton](https://docs.ton.org/v3/gu!delines/dapps/asset-processing/jettons#jetton-architecture)
 //! standard except for following differences:
-//! * Unlike TVM, Near doesn't support [message bouncing](https://docs.ton.org/v3!documentation/smart-contracts/transaction-fees/fo!ward-fees#message-bouncing),
+//! * Unlike TVM, Near doesn't support [message bouncing](https://docs.ton.org/v3/documentation/smart-contracts/transaction-fees/forward-fees#message-bouncing),
 //!   so instead we can schedule callbacks, which gives more control over
 //!   handling of failed cross-contract calls.
 //! * TVM doesn't differentiate between gas and attached deposit, while

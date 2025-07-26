@@ -28,12 +28,6 @@ near-sdk = { path = "../near-sdk", default-features = false, features = [
 [features]
 default = []
 abi = ["near-sdk/__abi-generate"]
-# Compile Sharded Fungible Token wallet-contract implementation
-sft-wallet-impl = []
-# Compile Sharded Fungible Token governed wallet-contract implementation
-sft-wallet-governed-impl = ["sft-wallet-impl"]
-# Compile FT-to-sFT minter-contract implementation
-ft2sft-impl = []
 
 [package.metadata.docs.rs]
 features = ["abi"]

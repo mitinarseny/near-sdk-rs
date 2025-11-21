@@ -21,7 +21,7 @@ pub enum ContractCode {
 pub enum GlobalContractId {
     CodeHash(
         #[serde_as(as = "Base64")]
-        #[schemars(with = "String")]
+        #[cfg_attr(feature = "abi", schemars(with = "String"))]
         CryptoHash,
     ) = 0,
     AccountId(AccountId) = 1,

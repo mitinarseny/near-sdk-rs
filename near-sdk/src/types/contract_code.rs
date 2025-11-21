@@ -19,7 +19,11 @@ pub enum ContractCode {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
 pub enum GlobalContractId {
-    CodeHash(#[serde_as(as = "Base64")] CryptoHash) = 0,
+    CodeHash(
+        #[serde_as(as = "Base64")]
+        #[schemars(with = "String")]
+        CryptoHash,
+    ) = 0,
     AccountId(AccountId) = 1,
 }
 

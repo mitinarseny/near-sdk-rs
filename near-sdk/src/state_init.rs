@@ -7,7 +7,7 @@ use serde_with::{base64::Base64, serde_as};
 use crate::{env, GlobalContractId};
 
 #[near(inside_nearsdk, serializers = [json, borsh])]
-#[serde(tag = "version")]
+#[serde(tag = "version", rename_all = "snake_case")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StateInit {
     V1(

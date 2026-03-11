@@ -38,15 +38,15 @@ near-gas = { version = "0.3", features = ["serde", "borsh"] }
 near-token = { version = "0.3", features = ["serde", "borsh"] }
 
 arbitrary = { version = "1.4", optional = true }
+near-abi = { version = "0.4.0", features = [
+    "__chunked-entries",
+], optional = true }
+schemars = { version = "0.8.22", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wee_alloc = { version = "0.4.5", default-features = false, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-schemars = { version = "0.8.22", optional = true }
-near-abi = { version = "0.4.0", features = [
-    "__chunked-entries",
-], optional = true }
 near-vm-runner = { version = "0.34", optional = true }
 near-primitives-core = { version = "0.34", optional = true }
 near-primitives = { version = "0.34", optional = true }
@@ -90,8 +90,8 @@ legacy = []
 global-contracts = []
 abi = [
     "borsh/unstable__schema",
-    "near-abi",
-    "schemars",
+    "dep:near-abi",
+    "dep:schemars",
     "near-sdk-macros/abi",
     "near-account-id/abi",
     "near-gas/abi",

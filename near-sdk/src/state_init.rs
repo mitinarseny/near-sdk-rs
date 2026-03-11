@@ -59,7 +59,10 @@ impl From<StateInitV1> for StateInit {
     }
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "unit-testing"))]
+#[cfg(any(
+    feature = "non-contract-usage",
+    all(not(target_arch = "wasm32"), feature = "unit-testing")
+))]
 const _: () = {
     use near_primitives_core::deterministic_account_id::{
         DeterministicAccountStateInit, DeterministicAccountStateInitV1,

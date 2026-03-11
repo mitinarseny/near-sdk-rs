@@ -543,7 +543,6 @@ pub fn derive_near_schema(#[allow(unused)] input: TokenStream) -> TokenStream {
         };
 
         TokenStream::from(quote! {
-            #[cfg(not(target_arch = "wasm32"))]
             const _: () = {
                 #[allow(non_camel_case_types)]
                 type #input_ident_proxy #generics = #input_ident #generics;
@@ -573,20 +572,20 @@ fn get_schema_derive(
     let mut derive = quote! {};
     if borsh_schema {
         derive = quote! {
-            #[cfg_attr(not(target_arch = "wasm32"), derive(#near_sdk_crate::borsh::BorshSchema))]
+            #[derive(#near_sdk_crate::borsh::BorshSchema)]
         };
         if need_borsh_crate {
             derive = quote! {
                 #derive
-                #[cfg_attr(not(target_arch = "wasm32"), borsh(crate = #string_borsh_crate))]
+                #[borsh(crate = #string_borsh_crate)]
             };
         }
     }
     if json_schema {
         derive = quote! {
             #derive
-            #[cfg_attr(not(target_arch = "wasm32"), derive(#near_sdk_crate::schemars::JsonSchema))]
-            #[cfg_attr(not(target_arch = "wasm32"), schemars(crate = #string_schemars_crate))]
+            #[derive(#near_sdk_crate::schemars::JsonSchema)]
+            #[schemars(crate = #string_schemars_crate)]
         };
     }
     derive
